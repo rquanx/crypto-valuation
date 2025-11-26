@@ -88,7 +88,7 @@ function formatUSD(value: number | null | undefined, compact = true): string {
     style: 'currency',
     currency: 'USD',
     notation: compact ? 'compact' : 'standard',
-    maximumFractionDigits: compact ? 1 : 2,
+    maximumFractionDigits: 2,
   }).format(value)
 }
 
