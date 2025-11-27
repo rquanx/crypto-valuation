@@ -13,11 +13,14 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const variantClass: Record<Variant, string> = {
-  default: 'bg-emerald-500 text-emerald-950 shadow-[0_10px_40px_-16px_rgba(16,185,129,0.7)] hover:bg-emerald-400 focus-visible:ring-2 focus-visible:ring-emerald-300/70',
-  outline: 'border border-slate-700 bg-slate-900 hover:border-slate-500 hover:bg-slate-800/70 text-slate-50',
-  secondary: 'bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-700',
-  ghost: 'text-slate-200 hover:bg-slate-800/60',
-  destructive: 'bg-rose-500 text-rose-50 hover:bg-rose-400',
+  default:
+    'bg-gradient-to-r from-[#6df2c8] via-[#57c7ff] to-[#f3b76b] text-[#041018] shadow-[0_18px_60px_-28px_rgba(87,199,255,0.9)] hover:brightness-110 focus-visible:ring-2 focus-visible:ring-[#57c7ff]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050913]',
+  outline:
+    'border border-white/15 bg-white/5 text-[#e6edf7] hover:border-[#57c7ff]/60 hover:text-white focus-visible:ring-2 focus-visible:ring-[#57c7ff]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050913]',
+  secondary:
+    'bg-[#0f1b2c] text-[#e6edf7] border border-white/10 hover:border-[#6df2c8]/40 hover:bg-[#0c1524] focus-visible:ring-2 focus-visible:ring-[#6df2c8]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050913]',
+  ghost: 'text-[#cfd8ec] hover:bg-white/5',
+  destructive: 'bg-[#ff7b6b] text-[#1b0b07] hover:bg-[#ff8f82] focus-visible:ring-2 focus-visible:ring-[#ff7b6b]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050913]',
 }
 
 const sizeClass: Record<Size, string> = {

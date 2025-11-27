@@ -50,45 +50,45 @@ export function TrackedCard({ item, refreshNonce, onPeChange, onRemove, onMetaUp
   const errorMessage = error instanceof Error ? error.message : null
 
   return (
-    <Card className="border border-slate-900/80 bg-slate-950/70">
+    <Card className="border-white/10 bg-[radial-gradient(circle_at_14%_12%,rgba(109,242,200,0.08),transparent_28%),radial-gradient(circle_at_90%_10%,rgba(87,199,255,0.08),transparent_30%),linear-gradient(145deg,#0d1a2c_0%,#0b1322_50%,#0a101c_100%)]">
       <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           {logo ? (
-            <img src={logo} alt={displayName} className="h-12 w-12 rounded-full border border-slate-800 object-cover" />
+            <img src={logo} alt={displayName} className="h-12 w-12 rounded-full border border-white/10 object-cover" />
           ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-800 bg-slate-900 text-lg font-semibold text-slate-200">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-[#0f1b2c] text-lg font-semibold text-[#e6edf7]">
               {displayName.slice(0, 2).toUpperCase()}
             </div>
           )}
           <div>
-            <div className="text-lg font-semibold text-slate-50">{displayName}</div>
+            <div className="text-lg font-semibold text-[#f6fbff]">{displayName}</div>
           </div>
           {isPending ? <LoadingPulse label="加载中" /> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-1 text-sm">
-              <span className="text-slate-400">PE</span>
+            <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1 text-sm">
+              <span className="text-[#9cb2d1]">PE</span>
               <Input type="number" value={item.pe} min={0} onChange={(e) => onPeChange(item.slug, Number(e.target.value))} className="h-9 w-20 bg-transparent" />
             </div>
           </div>
-          <Button className="bg-slate-900/60" variant="ghost" size="icon" onClick={() => onRemove(item.slug)} title="移除">
+          <Button className="text-[#9cb2d1]" variant="ghost" size="icon" onClick={() => onRemove(item.slug)} title="移除">
             ×
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4 pt-0">
         {errorMessage ? (
-          <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-sm text-amber-100">加载失败：{errorMessage}</div>
+          <div className="rounded-lg border border-[#f3b76b]/45 bg-[#f3b76b]/12 p-3 text-sm text-[#f7d9a1]">加载失败：{errorMessage}</div>
         ) : computed ? (
           <div className="grid gap-3 md:grid-cols-2">
             <MetricSummaryCard metric="holders_revenue" detail={computed.metricsDetail.holders_revenue} pe={item.pe} />
             <MetricSummaryCard metric="revenue" detail={computed.metricsDetail.revenue} pe={item.pe} />
           </div>
         ) : isPending ? (
-          <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-300">加载中...</div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-[#cdd8ec]">加载中...</div>
         ) : (
-          <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4 text-sm text-slate-400">暂无数据</div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-sm text-[#9cb2d1]">暂无数据</div>
         )}
       </CardContent>
     </Card>

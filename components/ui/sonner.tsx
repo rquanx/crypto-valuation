@@ -12,10 +12,10 @@ export function Toaster(props: ToasterProps) {
       closeButton
       toastOptions={{
         classNames: {
-          toast: 'bg-slate-950/90 border border-slate-800 text-slate-50 shadow-2xl shadow-emerald-500/10',
-          description: 'text-slate-400',
-          actionButton: 'bg-emerald-500 text-slate-950',
-          cancelButton: 'bg-slate-800 text-slate-100',
+          toast: 'bg-[#0b1524]/95 border border-white/10 text-[#e6edf7] shadow-[0_28px_120px_-80px_rgba(0,0,0,0.8)]',
+          description: 'text-[#9cb2d1]',
+          actionButton: 'bg-gradient-to-r from-[#6df2c8] to-[#57c7ff] text-[#041018]',
+          cancelButton: 'bg-white/5 text-[#e6edf7]',
         },
       }}
       {...props}

@@ -71,20 +71,20 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
 
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogContent className="overflow-hidden border border-slate-900 bg-slate-950/95 w-4/9">
+      <DialogContent className="overflow-hidden w-full max-w-5xl">
         <DialogHeader className="px-6">
           <DialogTitle>添加协议</DialogTitle>
         </DialogHeader>
 
         <div className="grid gap-4 px-6 pb-2 md:grid-cols-[1.1fr,0.9fr]">
-          <div className="rounded-xl border border-slate-900 bg-slate-950/70 p-4">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
             <div className="flex items-center gap-3">
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索名称、Slug 或链" />
               {optionsLoading ? <LoadingPulse label="加载中" /> : null}
             </div>
             <div className="mt-3 max-h-[360px] space-y-2 overflow-auto pr-1 ">
               {options.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-slate-800/80 p-3 text-sm text-slate-400">没有匹配的协议</div>
+                <div className="rounded-lg border border-dashed border-white/10 p-3 text-sm text-[#9cb2d1]">没有匹配的协议</div>
               ) : (
                 options.map((item) => {
                   const chosen = selectedSlug === item.slug
@@ -95,20 +95,20 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
                       className={cn(
                         'group flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition',
                         chosen
-                          ? 'border-emerald-400/70 bg-emerald-500/5 shadow-[0_12px_48px_-24px_rgba(16,185,129,0.7)]'
-                          : 'border-slate-900 bg-slate-950/80 hover:border-slate-700 hover:bg-slate-900/70'
+                          ? 'border-[#6df2c8]/70 bg-[#6df2c8]/10 shadow-[0_16px_60px_-32px_rgba(87,199,255,0.5)]'
+                          : 'border-white/10 bg-white/5 hover:border-[#57c7ff]/50 hover:bg-[#0f1b2c]/80'
                       )}
                     >
                       <div className="flex items-center gap-3">
                         {item.logo ? (
-                          <img src={item.logo} alt={item.displayName ?? item.name ?? item.slug} className="h-10 w-10 rounded-full border border-slate-800 object-cover" />
+                          <img src={item.logo} alt={item.displayName ?? item.name ?? item.slug} className="h-10 w-10 rounded-full border border-white/10 object-cover" />
                         ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-800 bg-slate-900 text-sm text-slate-200">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#0f1b2c] text-sm text-[#e6edf7]">
                             {(item.displayName || item.name || item.slug).slice(0, 2).toUpperCase()}
                           </div>
                         )}
                         <div>
-                          <div className="text-sm font-semibold text-slate-50">{item.displayName || item.name || item.slug}</div>
+                          <div className="text-sm font-semibold text-[#f6fbff]">{item.displayName || item.name || item.slug}</div>
                         </div>
                       </div>
                     </button>
@@ -118,9 +118,9 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-900 bg-slate-950/70 p-4">
-            <div className="text-sm font-semibold text-slate-100">估值 PE</div>
-            <div className="mt-3 space-y-4 text-sm text-slate-200">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm">
+            <div className="text-sm font-semibold text-[#f6fbff]">估值 PE</div>
+            <div className="mt-3 space-y-4 text-sm text-[#cdd8ec]">
               <Input type="number" min={0} value={pe} onChange={(e) => setPe(e.target.value)} className="mt-2 w-full" />
             </div>
           </div>

@@ -86,11 +86,11 @@ export default function Home() {
     <QueryClientProvider client={queryClient}>
       <div className={cn(spaceGrotesk.className, 'min-h-screen')}>
         <div className="mx-auto max-w-6xl px-5 py-5 space-y-4">
-          <Card className="border border-slate-900/70 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950">
-            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Card className="border-white/10 bg-[radial-gradient(circle_at_22%_22%,rgba(109,242,200,0.16),transparent_32%),radial-gradient(circle_at_82%_10%,rgba(87,199,255,0.16),transparent_30%),linear-gradient(120deg,#0f1f33_0%,#0c1524_55%,#0a101b_100%)]">
+            <CardHeader className="flex flex-col gap-3 border-none sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.3em] text-emerald-300">Crypto Valuation</div>
-                <CardTitle className="text-3xl sm:text-4xl">收入估值仪表盘</CardTitle>
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.3em] text-[#6df2c8]">Crypto Valuation</div>
+                <CardTitle className="text-3xl sm:text-4xl tracking-tight text-[#f6fbff]">收入估值仪表盘</CardTitle>
               </div>
             </CardHeader>
           </Card>

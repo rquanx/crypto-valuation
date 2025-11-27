@@ -17,7 +17,7 @@ export function Dialog({ open, onClose, children }: DialogProps) {
 
   return createPortal(
     <div className="fixed inset-0 z-50">
-      <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-[#02060f]/70 backdrop-blur-md" onClick={onClose} />
       <div className="absolute inset-0 flex items-center justify-center px-4">
         {children}
       </div>
@@ -27,21 +27,29 @@ export function Dialog({ open, onClose, children }: DialogProps) {
 }
 
 export function DialogContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl shadow-slate-950/60', className)} {...props} />
+  return (
+    <div
+      className={cn(
+        'w-full max-w-4xl rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 via-[#0f1b2c]/90 to-[#0a1220]/95 shadow-[0_36px_160px_-80px_rgba(0,0,0,0.8)] backdrop-blur-lg',
+        className
+      )}
+      {...props}
+    />
+  )
 }
 
 export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('space-y-1 border-b border-slate-900 px-6 py-5', className)} {...props} />
+  return <div className={cn('space-y-1 border-b border-white/5 px-6 py-5', className)} {...props} />
 }
 
 export function DialogTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn('text-xl font-semibold text-slate-50', className)} {...props} />
+  return <h2 className={cn('text-xl font-semibold text-[#f6fbff]', className)} {...props} />
 }
 
 export function DialogDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn('text-sm text-slate-400', className)} {...props} />
+  return <p className={cn('text-sm text-[#9cb2d1]', className)} {...props} />
 }
 
 export function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex items-center justify-end gap-2 border-t border-slate-900 px-6 py-4', className)} {...props} />
+  return <div className={cn('flex items-center justify-end gap-2 border-t border-white/5 px-6 py-4', className)} {...props} />
 }

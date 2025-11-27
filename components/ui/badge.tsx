@@ -6,12 +6,12 @@ import { cn } from '@/lib/utils'
 type BadgeVariant = 'default' | 'outline' | 'success' | 'sky' | 'warning' | 'muted'
 
 const badgeClass: Record<BadgeVariant, string> = {
-  default: 'bg-slate-800 text-slate-100',
-  outline: 'border border-slate-700 text-slate-200',
-  success: 'bg-emerald-500/15 text-emerald-200 border border-emerald-500/30',
-  sky: 'bg-sky-500/15 text-sky-200 border border-sky-500/30',
-  warning: 'bg-amber-500/15 text-amber-200 border border-amber-500/30',
-  muted: 'bg-slate-800/60 text-slate-400 border border-slate-700',
+  default: 'bg-[#0f1b2c] text-[#e0eaff] border border-white/10',
+  outline: 'border border-white/30 text-[#e6edf7]',
+  success: 'bg-[#123327] text-[#84f5c7] border border-[#6df2c8]/45',
+  sky: 'bg-[#0f2235] text-[#8bd7ff] border border-[#57c7ff]/45',
+  warning: 'bg-[#2b1d0d] text-[#f7c98c] border border-[#f3b76b]/45',
+  muted: 'bg-white/5 text-[#9cb2d1] border border-white/10',
 }
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
