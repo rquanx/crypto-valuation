@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input'
 import { LoadingPulse } from '@/components/valuation/loading-pulse'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import type { CoverageItem } from '@/lib/queries'
 
 type AddProtocolModalProps = {
@@ -41,7 +42,8 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
         setOptions(data.items as CoverageItem[])
       } catch (err) {
         if (!controller.signal.aborted) {
-          // TODO: showtoast message
+          const message = err instanceof Error ? err.message : '加载协议列表失败'
+          toast.error(message)
           console.error(err)
         }
       } finally {
@@ -140,7 +142,8 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
                 await onAdd(selectedItem, Math.max(1, parsedPe))
                 onClose()
               } catch (error) {
-                // TODO: show toast
+                const message = error instanceof Error ? error.message : '添加协议失败，请稍后再试'
+                toast.error(message)
               } finally {
                 setAdding(false)
               }
