@@ -19,7 +19,8 @@ type AddProtocolModalProps = {
 export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps) {
   const [search, setSearch] = useState('')
   const [options, setOptions] = useState<CoverageItem[]>([])
-  const [loading, setLoading] = useState(false)
+  const [optionsLoading, setOptionsLoading] = useState(false)
+  const [adding, setAdding] = useState(false)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
   const [pe, setPe] = useState('15')
 
@@ -27,7 +28,7 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
     if (!open) return
     const controller = new AbortController()
     const fetchOptions = async () => {
-      setLoading(true)
+      setOptionsLoading(true)
       try {
         const params = new URLSearchParams({
           limit: '30',
@@ -45,7 +46,7 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
         }
       } finally {
         if (!controller.signal.aborted) {
-          setLoading(false)
+          setOptionsLoading(false)
         }
       }
     }
@@ -59,6 +60,8 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
       setSelectedSlug(null)
       setPe('15')
       setSearch('')
+      setOptionsLoading(false)
+      setAdding(false)
     }
   }, [open])
 
@@ -75,7 +78,7 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
           <div className="rounded-xl border border-slate-900 bg-slate-950/70 p-4">
             <div className="flex items-center gap-3">
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索名称、Slug 或链" />
-              {loading ? <LoadingPulse label="加载中" /> : null}
+              {optionsLoading ? <LoadingPulse label="加载中" /> : null}
             </div>
             <div className="mt-3 max-h-[360px] space-y-2 overflow-auto pr-1 ">
               {options.length === 0 ? (
@@ -128,15 +131,22 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
             取消
           </Button>
           <Button
-            disabled={!selectedItem}
+            disabled={!selectedItem || adding}
             onClick={async () => {
               if (!selectedItem) return
-              const parsedPe = Number(pe) || 15
-              await onAdd(selectedItem, Math.max(1, parsedPe))
-              onClose()
+              try {
+                setAdding(true)
+                const parsedPe = Number(pe) || 15
+                await onAdd(selectedItem, Math.max(1, parsedPe))
+                onClose()
+              } catch (error) {
+                // TODO: show toast
+              } finally {
+                setAdding(false)
+              }
             }}
           >
-            {selectedItem ? `添加 ${selectedItem.displayName || selectedItem.name || selectedItem.slug}` : '先选择一个协议'}
+            {adding ? '添加中...' : selectedItem ? `添加 ${selectedItem.displayName || selectedItem.name || selectedItem.slug}` : '先选择一个协议'}
           </Button>
         </DialogFooter>
       </DialogContent>

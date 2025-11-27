@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.11",
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^12.4.6",
     "class-variance-authority": "^0.7.1",

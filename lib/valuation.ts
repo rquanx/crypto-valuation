@@ -3,6 +3,19 @@ import type { ProtocolSummary } from './queries'
 
 export type ActiveMetricType = 'holders_revenue' | 'revenue'
 export type ValuationWindow = 1 | 7 | 30 | 90 | 180 | 365
+export type StoredTracked = {
+  slug: string
+  defillamaId?: string
+  protocolId?: number
+  name: string
+  logo?: string | null
+  category?: string | null
+  chains?: string[]
+  metric?: 'auto' | ActiveMetricType
+  pe: number
+  enabled: boolean
+  addedAt: number
+}
 
 export type ApiSeriesResponse = {
   protocol: ProtocolSummary
@@ -103,4 +116,27 @@ export function computeTokenFromSeries(data: ApiSeriesResponse): ComputedToken {
     metricsDetail,
     latestByMetric: data.latestByMetric,
   }
+}
+
+export function mergeTrackedWithProtocol(tracked: StoredTracked, protocol: ProtocolSummary): StoredTracked {
+  return {
+    ...tracked,
+    name: tracked.name || protocol.displayName || protocol.name || tracked.slug,
+    defillamaId: protocol.defillamaId,
+    protocolId: protocol.id,
+    logo: tracked.logo ?? protocol.logo,
+    category: tracked.category ?? protocol.category ?? undefined,
+    chains: tracked.chains ?? protocol.chains,
+  }
+}
+
+export function trackedHasDiff(next: StoredTracked, prev: StoredTracked): boolean {
+  return (
+    next.name !== prev.name ||
+    next.defillamaId !== prev.defillamaId ||
+    next.protocolId !== prev.protocolId ||
+    next.logo !== prev.logo ||
+    next.category !== prev.category ||
+    JSON.stringify(next.chains || []) !== JSON.stringify(prev.chains || [])
+  )
 }
