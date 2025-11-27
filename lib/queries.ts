@@ -25,12 +25,6 @@ export type CoverageItem = StoredProtocol & {
 }
 
 const DEFAULT_WINDOWS = [1, 7, 30, 90, 365]
-const METRIC_ORDER: Record<MetricPreference, NormalizedMetricType[]> = {
-  auto: ['holders_revenue', 'revenue', 'fees'],
-  holders_revenue: ['holders_revenue', 'revenue', 'fees'],
-  revenue: ['revenue', 'holders_revenue', 'fees'],
-  fees: ['fees', 'revenue', 'holders_revenue'],
-}
 
 type ProtocolRow = {
   id: number
@@ -50,19 +44,6 @@ type CoverageRow = {
   metric_type: NormalizedMetricType
   latest_date: string | null
   rows: number
-}
-
-type AggregateRow = {
-  slug: string
-  metric_type: NormalizedMetricType
-  total: number | null
-}
-
-function toDateStringFromWindow(days: number): string {
-  const now = new Date()
-  now.setUTCHours(0, 0, 0, 0)
-  now.setUTCDate(now.getUTCDate() - Math.max(0, days - 1))
-  return now.toISOString().slice(0, 10)
 }
 
 function buildProtocolWhere(options: { search?: string | null; ids?: number[]; slugs?: string[] }): { where: string; params: Array<string | number> } {
@@ -177,112 +158,6 @@ function buildCoverage(
   }
 
   return { coverageByProtocol, latestByProtocol }
-}
-
-function aggregateTotals(slugs: string[], windows: number[], db: SqliteDatabase): Map<number, Map<string, Record<NormalizedMetricType, number>>> {
-  const result = new Map<number, Map<string, Record<NormalizedMetricType, number>>>()
-  if (!slugs.length) return result
-
-  const placeholders = slugs.map(() => '?').join(',')
-
-  for (const window of windows) {
-    const since = toDateStringFromWindow(window)
-    const rows = db
-      .prepare(
-        `
-        SELECT slug, metric_type, SUM(value_usd) as total
-        FROM protocol_metrics
-        WHERE slug IN (${placeholders}) AND date >= ?
-        GROUP BY slug, metric_type
-      `
-      )
-      .all(...slugs, since) as AggregateRow[]
-
-    for (const row of rows) {
-      if (!result.has(window)) {
-        result.set(window, new Map())
-      }
-      const windowMap = result.get(window)!
-      if (!windowMap.has(row.slug)) {
-        windowMap.set(row.slug, { fees: 0, revenue: 0, holders_revenue: 0 })
-      }
-      const metrics = windowMap.get(row.slug)!
-      metrics[row.metric_type] = Number(row.total ?? 0)
-    }
-  }
-
-  return result
-}
-
-function chooseMetric(preference: MetricPreference, coverage: Record<NormalizedMetricType, boolean>, totals: Record<NormalizedMetricType, number | undefined>): NormalizedMetricType | null {
-  const order = METRIC_ORDER[preference]
-  for (const metric of order) {
-    if (coverage[metric] && totals[metric] !== undefined) {
-      return metric
-    }
-  }
-  // If no coverage, still fall back to the first metric with any total value
-  for (const metric of order) {
-    if (totals[metric] !== undefined) return metric
-  }
-  return null
-}
-
-export function getTokenAggregates(
-  options: {
-    metricPreference?: MetricPreference
-    windows?: number[]
-    search?: string | null
-    ids?: number[]
-    slugs: string[]
-  },
-  db: SqliteDatabase = getDb()
-): TokenAggregateResponse {
-  const metricPreference = options.metricPreference ?? 'auto'
-  const windows = (options.windows && options.windows.length ? options.windows : DEFAULT_WINDOWS).map((value) => Number(value)).filter((value) => DEFAULT_WINDOWS.includes(value))
-  const uniqueWindows = Array.from(new Set(windows.length ? windows : DEFAULT_WINDOWS)).sort((a, b) => a - b)
-
-  const protocols = listProtocols(
-    {
-      search: options.search,
-      ids: options.ids,
-      slugs: options.slugs,
-      trackedOnly: true,
-    },
-    db
-  )
-
-  const slugs = protocols.map((p) => p.slug)
-  const { coverageByProtocol, latestByProtocol } = buildCoverage(slugs, db)
-  const totals = aggregateTotals(slugs, uniqueWindows, db)
-
-  const items: TokenAggregate[] = protocols.map((protocol) => {
-    const coverage = coverageByProtocol.get(protocol.slug) ?? { fees: false, revenue: false, holders_revenue: false }
-    const latest = latestByProtocol.get(protocol.slug) ?? {}
-    const metricUsedWindows: Record<number, NormalizedMetricType | null> = {}
-    const windowsTotals: Record<number, number | null> = {}
-
-    for (const window of uniqueWindows) {
-      const windowMap = totals.get(window)
-      const totalsForProtocol = (windowMap?.get(protocol.slug) ?? {}) as Record<NormalizedMetricType, number | undefined>
-      const chosen = chooseMetric(metricPreference, coverage, totalsForProtocol)
-      metricUsedWindows[window] = chosen
-      windowsTotals[window] = chosen ? totalsForProtocol[chosen] ?? null : null
-    }
-
-    const metricUsed = Object.values(metricUsedWindows).find((metric) => metric !== null) ?? null
-
-    return {
-      protocol,
-      metricUsed,
-      metricUsedWindows,
-      windows: windowsTotals,
-      coverage,
-      latestByMetric: latest,
-    }
-  })
-
-  return { windows: uniqueWindows, metricPreference, items }
 }
 
 export function getCoverageList(
