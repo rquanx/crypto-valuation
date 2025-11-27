@@ -69,8 +69,8 @@ const WINDOW_LABELS: Record<ValuationWindow, string> = {
   1: '昨日',
   7: '7天累计',
   30: '30天累计',
-  90: '季度累计',
-  180: '半年累计',
+  90: '90天累计',
+  180: '180天累计',
   365: '365天累计',
 }
 const STORAGE_KEY = 'crypto-valuation-tracked'
@@ -95,7 +95,8 @@ function formatUSD(value: number | null | undefined, compact = true): string {
 function formatYi(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '-'
   const yi = value / 1e8
-  return `$${yi.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} 亿`
+  const num = yi.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  return `$${num}${num == '0' ? '' : ' 亿'}`
 }
 
 function cutoffDate(window: number, lastest: string): string {
@@ -167,15 +168,16 @@ function LoadingPulse({ label }: { label: string }) {
   )
 }
 
-function EmptyState({ onAdd }: { onAdd: () => void }) {
+function EmptyState({ onAdd, search }: { onAdd: () => void; search?: string }) {
   return (
     <Card className="border-dashed border-slate-800/80 bg-slate-950/40">
       <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-        <CardTitle className="text-xl">还没有跟踪的协议</CardTitle>
-        <CardDescription className="max-w-md text-slate-400">从 DefiLlama 库里挑选一个协议，设置 PE 后即可开始计算估值。</CardDescription>
-        <Button onClick={onAdd} size="lg" className="px-6">
-          新增跟踪
-        </Button>
+        <CardTitle className="text-xl">没有跟踪的协议</CardTitle>
+        {!search && (
+          <Button onClick={onAdd} size="lg" className="px-6">
+            新增跟踪
+          </Button>
+        )}
       </CardContent>
     </Card>
   )
@@ -187,14 +189,12 @@ function AddProtocolModal({ open, onClose, onAdd }: { open: boolean; onClose: ()
   const [loading, setLoading] = useState(false)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
   const [pe, setPe] = useState('15')
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
     const controller = new AbortController()
     const fetchOptions = async () => {
       setLoading(true)
-      setError(null)
       try {
         const params = new URLSearchParams({
           limit: '30',
@@ -207,7 +207,8 @@ function AddProtocolModal({ open, onClose, onAdd }: { open: boolean; onClose: ()
         setOptions(data.items as CoverageItem[])
       } catch (err) {
         if (!controller.signal.aborted) {
-          setError((err as Error).message)
+          const message = (err as Error).message
+          // TODO: showtoast message
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -225,7 +226,6 @@ function AddProtocolModal({ open, onClose, onAdd }: { open: boolean; onClose: ()
       setSelectedSlug(null)
       setPe('15')
       setSearch('')
-      setError(null)
     }
   }, [open])
 
@@ -233,10 +233,9 @@ function AddProtocolModal({ open, onClose, onAdd }: { open: boolean; onClose: ()
 
   return (
     <Dialog open={open} onClose={onClose}>
-      <DialogContent className="overflow-hidden border border-slate-900 bg-slate-950/95">
+      <DialogContent className="overflow-hidden border border-slate-900 bg-slate-950/95 w-4/9">
         <DialogHeader className="px-6">
           <DialogTitle>添加协议</DialogTitle>
-          <DialogDescription>浏览可用的 DefiLlama 数据源，设置 PE 后保存到仪表盘。</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 px-6 pb-2 md:grid-cols-[1.1fr,0.9fr]">
@@ -245,10 +244,8 @@ function AddProtocolModal({ open, onClose, onAdd }: { open: boolean; onClose: ()
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索名称、Slug 或链" />
               {loading ? <LoadingPulse label="加载中" /> : null}
             </div>
-            <div className="mt-3 max-h-[360px] space-y-2 overflow-auto pr-1">
-              {error ? (
-                <div className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-200">{error}</div>
-              ) : options.length === 0 ? (
+            <div className="mt-3 max-h-[360px] space-y-2 overflow-auto pr-1 ">
+              {options.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-slate-800/80 p-3 text-sm text-slate-400">没有匹配的协议</div>
               ) : (
                 options.map((item) => {
@@ -278,10 +275,6 @@ function AddProtocolModal({ open, onClose, onAdd }: { open: boolean; onClose: ()
                           <div className="text-[11px] text-slate-500">{item.chains.slice(0, 3).join(' · ')}</div>
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1 text-[11px] text-slate-400">
-                        <ProtocolBadge label={metricLabel.holders_revenue} metric={item.coverage.holders_revenue ? 'holders_revenue' : undefined} />
-                        <ProtocolBadge label={metricLabel.revenue} metric={item.coverage.revenue ? 'revenue' : undefined} />
-                      </div>
                     </button>
                   )
                 })
@@ -290,25 +283,9 @@ function AddProtocolModal({ open, onClose, onAdd }: { open: boolean; onClose: ()
           </div>
 
           <div className="rounded-xl border border-slate-900 bg-slate-950/70 p-4">
-            <div className="text-sm font-semibold text-slate-100">估值假设</div>
+            <div className="text-sm font-semibold text-slate-100">估值 PE</div>
             <div className="mt-3 space-y-4 text-sm text-slate-200">
-              <div>
-                <div className="text-xs uppercase text-slate-500">PE 倍数</div>
-                <Input type="number" min={1} step={0.5} value={pe} onChange={(e) => setPe(e.target.value)} className="mt-2 w-full" />
-              </div>
-
-              <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs text-slate-300">
-                <div className="font-semibold text-slate-100">当前选择</div>
-                <div className="mt-2 space-y-1">
-                  <div>协议：{selectedItem ? selectedItem.displayName || selectedItem.name || selectedItem.slug : '未选择'}</div>
-                  <div>分类：{selectedItem?.category || '未分类'}</div>
-                  <div className="flex flex-wrap gap-2">
-                    <span>数据覆盖：</span>
-                    <ProtocolBadge label={metricLabel.holders_revenue} metric={selectedItem?.coverage.holders_revenue ? 'holders_revenue' : null} />
-                    <ProtocolBadge label={metricLabel.revenue} metric={selectedItem?.coverage.revenue ? 'revenue' : null} />
-                  </div>
-                </div>
-              </div>
+              <Input type="number" min={0} value={pe} onChange={(e) => setPe(e.target.value)} className="mt-2 w-full" />
             </div>
           </div>
         </div>
@@ -336,24 +313,27 @@ function AddProtocolModal({ open, onClose, onAdd }: { open: boolean; onClose: ()
 
 function MetricSummaryCard({ metric, detail, pe }: { metric: ActiveMetricType; detail?: MetricDetail; pe: number }) {
   return (
-    <div className="rounded-xl border border-slate-900 bg-slate-950/60 p-4">
+    <div className="rounded-xl border border-slate-900 bg-slate-950/60 p-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ProtocolBadge label={metricLabel[metric]} metric={detail?.available ? metric : null} />
-          <span className="text-[11px] text-slate-500">{detail?.latest ? `最近 ${detail.latest}` : '暂无数据'}</span>
+          <span className="text-[11px] text-slate-500">{detail?.latest ? `${detail.latest}` : '暂无数据'}</span>
         </div>
-        <div className="text-[11px] text-slate-500">PE {pe}</div>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {WINDOWS.map((window) => {
           const total = detail?.totals?.[window] ?? null
           const valuation = computeAnnualizedValuation(total, window, pe)
           return (
-            <div key={window} className="rounded-lg border border-slate-900 bg-slate-900/60 p-3">
-              <div className="text-[11px] uppercase text-slate-500">{WINDOW_LABELS[window]}</div>
-              <div className="mt-2 text-sm font-semibold text-slate-100">{formatUSD(total)}</div>
-              <div className="text-[11px] text-slate-500">{WINDOW_LABELS[window]}估值</div>
-              <div className="text-sm font-semibold text-emerald-200">{formatYi(valuation)}</div>
+            <div key={window} className="flex justify-between rounded-lg border border-slate-900 bg-slate-900/60 p-3">
+              <div>
+                <div className="text-[11px] uppercase text-slate-500">{WINDOW_LABELS[window]}</div>
+                <div className="text-sm font-semibold text-slate-100">{formatUSD(total)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-500">估值</div>
+                <div className="text-sm font-semibold text-emerald-200">{formatYi(valuation)}</div>
+              </div>
             </div>
           )
         })}
@@ -367,7 +347,6 @@ export default function Home() {
   const [hydrated, setHydrated] = useState(false)
   const [tokenData, setTokenData] = useState<Record<string, ComputedToken>>({})
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [search, setSearch] = useState('')
   const [refreshNonce, setRefreshNonce] = useState(0)
@@ -406,7 +385,6 @@ export default function Home() {
 
     const load = async () => {
       setLoading(true)
-      setError(null)
 
       try {
         const errors: string[] = []
@@ -467,13 +445,15 @@ export default function Home() {
         }
 
         if (errors.length) {
-          setError(errors[0])
+          const message = errors[0]
+          // TODO: showtoast message
         }
 
         setTokenData(dataMap)
       } catch (err) {
         if (!controller.signal.aborted) {
-          setError((err as Error).message)
+          const message = (err as Error).message
+          // TODO: showtoast message
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -522,20 +502,22 @@ export default function Home() {
         },
       ]
     })
-
-    // Tell backend to ingest this protocol (fire and forget)
+    setLoading(true)
     fetch(`/api/tracked`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ slug: item.slug }),
     })
-      .then((r) => setRefreshNonce((n) => n + 1))
+      .then((r) => {
+        setRefreshNonce((n) => n + 1)
+        setLoading(false)
+      })
       .catch(() => undefined)
   }
 
   return (
     <div className={cn(spaceGrotesk.className, 'min-h-screen')}>
-      <div className="mx-auto max-w-6xl px-5 py-10 space-y-6">
+      <div className="mx-auto max-w-6xl px-5 py-5 space-y-4">
         <Card className="border border-slate-900/70 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950">
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -548,7 +530,6 @@ export default function Home() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索名称 / Slug / 链" className="w-72" />
-            {error ? <Badge variant="warning">{error}</Badge> : null}
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => setRefreshNonce((n) => n + 1)}>
@@ -560,17 +541,14 @@ export default function Home() {
 
         <div className="space-y-4">
           {!filteredTracked.length ? (
-            <EmptyState onAdd={() => setShowModal(true)} />
+            <EmptyState onAdd={() => setShowModal(true)} search={search} />
           ) : (
             filteredTracked.map((item) => {
               const apiItem = tokenData[item.slug.toLowerCase()]
               const displayName = apiItem?.protocol.displayName || apiItem?.protocol.name || item.name || item.slug
-              const chains = apiItem?.protocol.chains || item.chains || []
-              const category = apiItem?.protocol.category || item.category || 'Uncategorized'
-
               return (
                 <Card key={item.slug} className="border border-slate-900/80 bg-slate-950/70">
-                  <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
                       {apiItem?.protocol.logo || item.logo ? (
                         <img src={(apiItem?.protocol.logo || item.logo) as string} alt={displayName} className="h-12 w-12 rounded-full border border-slate-800 object-cover" />
@@ -581,33 +559,22 @@ export default function Home() {
                       )}
                       <div>
                         <div className="text-lg font-semibold text-slate-50">{displayName}</div>
-                        <div className="text-sm text-slate-400">{item.slug}</div>
-                        <div className="text-[11px] text-slate-500">{chains.slice(0, 3).join(' · ') || 'Unknown chain'}</div>
                       </div>
+                      {loading ? <LoadingPulse label="加载中" /> : null}
                     </div>
-
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="muted" className="border border-slate-800/80 bg-slate-900/70">
-                        {category}
-                      </Badge>
-                      {apiItem?.latestByMetric ? (
-                        <Badge variant="outline" className="border-slate-800/80 bg-slate-900/60">
-                          最近 {apiItem.latestByMetric.revenue ?? apiItem.latestByMetric.holders_revenue ?? '-'}
-                        </Badge>
-                      ) : null}
                       <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm">
-                          <span className="text-slate-400">PE 假设</span>
-                          <Input type="number" value={item.pe} min={0} step={0.5} onChange={(e) => handlePeChange(item.slug, Number(e.target.value))} className="h-9 w-20 bg-transparent" />
+                        <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-1 text-sm">
+                          <span className="text-slate-400">PE</span>
+                          <Input type="number" value={item.pe} min={0} onChange={(e) => handlePeChange(item.slug, Number(e.target.value))} className="h-9 w-20 bg-transparent" />
                         </div>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => handleRemove(item.slug)} title="移除">
+                      <Button className="bg-slate-900/60" variant="ghost" size="icon" onClick={() => handleRemove(item.slug)} title="移除">
                         ×
                       </Button>
                     </div>
                   </CardHeader>
-
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-4 pt-0">
                     <div className="grid gap-3 md:grid-cols-2">
                       <MetricSummaryCard metric="holders_revenue" detail={apiItem?.metricsDetail?.holders_revenue} pe={item.pe} />
                       <MetricSummaryCard metric="revenue" detail={apiItem?.metricsDetail?.revenue} pe={item.pe} />

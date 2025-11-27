@@ -8,7 +8,7 @@ export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElemen
 }
 
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('flex flex-col gap-1 border-b border-slate-800/70 px-6 pb-4 pt-5', className)} {...props} />
+  return <div className={cn('flex flex-col gap-1 border-slate-800/70 px-6 pb-4 pt-5', className)} {...props} />
 }
 
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
