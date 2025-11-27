@@ -20,7 +20,7 @@ export function MetricSummaryCard({ metric, detail, pe }: { metric: ActiveMetric
             <div key={window} className="flex justify-between rounded-lg border border-slate-900 bg-slate-900/60 p-3">
               <div>
                 <div className="text-[11px] uppercase text-slate-500">{WINDOW_LABELS[window]}</div>
-                <div className="text-sm font-semibold text-slate-100">{formatUSD(total)}</div>
+                <div className="text-sm font-semibold text-slate-100">{(total || 0) > 1e8 ? formatYi(total) : formatUSD(total)}</div>
               </div>
               <div>
                 <div className="text-[11px] text-slate-500">估值</div>

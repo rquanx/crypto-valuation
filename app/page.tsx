@@ -42,7 +42,7 @@ export default function Home() {
     if (!search.trim()) return tracked
     const term = search.trim().toLowerCase()
     return tracked.filter((item) => {
-      const tokens = [item.name, item.slug, ...(item.chains || [])].join(' ').toLowerCase()
+      const tokens = [item.name, item.slug].join(' ').toLowerCase()
       return tokens.includes(term)
     })
   }, [tracked, search])
@@ -68,12 +68,8 @@ export default function Home() {
         ...prev,
         {
           slug: item.slug,
-          defillamaId: item.defillamaId,
-          protocolId: item.id,
           name: item.displayName || item.name || item.slug,
           logo: item.logo,
-          category: item.category ?? undefined,
-          chains: item.chains,
           pe,
           enabled: true,
           addedAt: Date.now(),

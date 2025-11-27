@@ -90,7 +90,7 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
                   const chosen = selectedSlug === item.slug
                   return (
                     <button
-                      key={item.id}
+                      key={item.slug}
                       onClick={() => setSelectedSlug(item.slug)}
                       className={cn(
                         'group flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition',
@@ -109,8 +109,6 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
                         )}
                         <div>
                           <div className="text-sm font-semibold text-slate-50">{item.displayName || item.name || item.slug}</div>
-                          <div className="text-xs text-slate-400">{item.category || 'Uncategorized'}</div>
-                          <div className="text-[11px] text-slate-500">{item.chains.slice(0, 3).join(' · ')}</div>
                         </div>
                       </div>
                     </button>

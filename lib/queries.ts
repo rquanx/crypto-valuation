@@ -1,24 +1,11 @@
 import type { Database as SqliteDatabase } from 'better-sqlite3'
 import { getDb } from './db'
-import type { NormalizedMetricType } from './ingest'
+import { NormalizedMetricType, protocolRowToStored, StoredProtocol } from './ingest'
 
 export type MetricPreference = 'auto' | NormalizedMetricType
 
-export type ProtocolSummary = {
-  id: number
-  defillamaId: string
-  slug: string
-  name: string | null
-  displayName: string | null
-  protocolType: string | null
-  category: string | null
-  chains: string[]
-  logo: string | null
-  hasLabelBreakdown: boolean
-}
-
 export type TokenAggregate = {
-  protocol: ProtocolSummary
+  protocol: StoredProtocol
   metricUsed: NormalizedMetricType | null
   metricUsedWindows: Record<number, NormalizedMetricType | null>
   windows: Record<number, number | null>
@@ -32,7 +19,7 @@ export type TokenAggregateResponse = {
   items: TokenAggregate[]
 }
 
-export type CoverageItem = ProtocolSummary & {
+export type CoverageItem = StoredProtocol & {
   coverage: Record<NormalizedMetricType, boolean>
   latestByMetric: Partial<Record<NormalizedMetricType, string | null>>
 }
@@ -59,14 +46,14 @@ type ProtocolRow = {
 }
 
 type CoverageRow = {
-  protocol_id: number
+  slug: string
   metric_type: NormalizedMetricType
   latest_date: string | null
   rows: number
 }
 
 type AggregateRow = {
-  protocol_id: number
+  slug: string
   metric_type: NormalizedMetricType
   total: number | null
 }
@@ -78,34 +65,14 @@ function toDateStringFromWindow(days: number): string {
   return now.toISOString().slice(0, 10)
 }
 
-function rowToProtocol(row: ProtocolRow): ProtocolSummary {
-  return {
-    id: row.id,
-    defillamaId: row.defillama_id,
-    slug: row.slug,
-    name: row.name,
-    displayName: row.display_name,
-    protocolType: row.protocol_type,
-    category: row.category,
-    chains: row.chains ? (JSON.parse(row.chains) as string[]) : [],
-    logo: row.logo,
-    hasLabelBreakdown: row.has_label_breakdown === 1,
-  }
-}
-
-function buildProtocolWhere(options: { search?: string | null; chain?: string | null; ids?: number[]; slugs?: string[]; defillamaIds?: string[] }): { where: string; params: Array<string | number> } {
+function buildProtocolWhere(options: { search?: string | null; ids?: number[]; slugs?: string[] }): { where: string; params: Array<string | number> } {
   const clauses: string[] = []
   const params: Array<string | number> = []
 
   if (options.search) {
     const term = `%${options.search.toLowerCase()}%`
-    clauses.push('(lower(p.name) LIKE ? OR lower(p.display_name) LIKE ? OR lower(p.slug) LIKE ? OR lower(p.defillama_id) LIKE ?)')
-    params.push(term, term, term, term)
-  }
-
-  if (options.chain) {
-    clauses.push('p.chains LIKE ?')
-    params.push(`%${options.chain}%`)
+    clauses.push('(lower(p.name) LIKE ? OR lower(p.display_name) LIKE ? OR lower(p.slug) LIKE ?)')
+    params.push(term, term, term)
   }
 
   if (options.ids && options.ids.length) {
@@ -118,54 +85,46 @@ function buildProtocolWhere(options: { search?: string | null; chain?: string | 
     params.push(...options.slugs.map((s) => s.toLowerCase()))
   }
 
-  if (options.defillamaIds && options.defillamaIds.length) {
-    clauses.push(`lower(p.defillama_id) IN (${options.defillamaIds.map(() => '?').join(',')})`)
-    params.push(...options.defillamaIds.map((s) => s.toLowerCase()))
-  }
-
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
   return { where, params }
 }
 
-export function findProtocol(identifier: string, db: SqliteDatabase = getDb()): ProtocolSummary | null {
+export function findProtocol(identifier: string, db: SqliteDatabase = getDb()): StoredProtocol | null {
   const row = db
     .prepare(
       `
-      SELECT id, defillama_id, slug, name, display_name, protocol_type, category, chains, logo, has_label_breakdown
+      SELECT id, slug, name, display_name, logo
       FROM protocols p
-      WHERE p.id = ? OR lower(p.slug) = lower(?) OR lower(p.defillama_id) = lower(?)
+      WHERE p.id = ?
+        OR p.slug = lower(?)
       LIMIT 1
     `
     )
-    .get(identifier, identifier, identifier) as ProtocolRow | undefined
+    .get(identifier, identifier) as ProtocolRow | undefined
 
-  return row ? rowToProtocol(row) : null
+  return row ? protocolRowToStored(row) : null
 }
 
 export function listProtocols(
   options: {
     search?: string | null
-    chain?: string | null
     limit?: number
     trackedOnly?: boolean
     ids?: number[]
     slugs?: string[]
-    defillamaIds?: string[]
   },
   db: SqliteDatabase = getDb()
-): ProtocolSummary[] {
+): StoredProtocol[] {
   const limit = Math.max(1, Math.min(options.limit ?? 200, 500))
   const { where, params } = buildProtocolWhere({
     search: options.search,
-    chain: options.chain,
     ids: options.ids,
     slugs: options.slugs,
-    defillamaIds: options.defillamaIds,
   })
 
-  const joinTracked = options.trackedOnly !== false ? 'JOIN tracked_protocols t ON t.protocol_id = p.id' : ''
+  const joinTracked = options.trackedOnly !== false ? 'JOIN tracked_protocols t ON t.slug = p.slug' : ''
   const sql = `
-    SELECT p.id, p.defillama_id, p.slug, p.name, p.display_name, p.protocol_type, p.category, p.chains, p.logo, p.has_label_breakdown
+    SELECT p.id, p.slug, p.name, p.display_name, p.logo
     FROM protocols p
     ${joinTracked}
     ${where}
@@ -174,80 +133,80 @@ export function listProtocols(
   `
 
   const rows = db.prepare(sql).all(...params, limit) as ProtocolRow[]
-  return rows.map(rowToProtocol)
+  return rows.map(protocolRowToStored)
 }
 
 function buildCoverage(
-  protocolIds: number[],
+  slugs: string[],
   db: SqliteDatabase
 ): {
-  coverageByProtocol: Map<number, Record<NormalizedMetricType, boolean>>
-  latestByProtocol: Map<number, Partial<Record<NormalizedMetricType, string | null>>>
+  coverageByProtocol: Map<string, Record<NormalizedMetricType, boolean>>
+  latestByProtocol: Map<string, Partial<Record<NormalizedMetricType, string | null>>>
 } {
-  if (!protocolIds.length) {
+  if (!slugs.length) {
     return { coverageByProtocol: new Map(), latestByProtocol: new Map() }
   }
 
-  const placeholders = protocolIds.map(() => '?').join(',')
+  const placeholders = slugs.map(() => '?').join(',')
   const rows = db
     .prepare(
       `
-      SELECT protocol_id, metric_type, MAX(date) as latest_date, COUNT(1) as rows
+      SELECT slug, metric_type, MAX(date) as latest_date, COUNT(1) as rows
       FROM protocol_metrics
-      WHERE protocol_id IN (${placeholders})
-      GROUP BY protocol_id, metric_type
+      WHERE slug IN (${placeholders})
+      GROUP BY slug, metric_type
     `
     )
-    .all(...protocolIds) as CoverageRow[]
+    .all(...slugs) as CoverageRow[]
 
-  const coverageByProtocol = new Map<number, Record<NormalizedMetricType, boolean>>()
-  const latestByProtocol = new Map<number, Partial<Record<NormalizedMetricType, string | null>>>()
+  const coverageByProtocol = new Map<string, Record<NormalizedMetricType, boolean>>()
+  const latestByProtocol = new Map<string, Partial<Record<NormalizedMetricType, string | null>>>()
 
   for (const row of rows) {
-    if (!coverageByProtocol.has(row.protocol_id)) {
-      coverageByProtocol.set(row.protocol_id, { fees: false, revenue: false, holders_revenue: false })
+    if (!coverageByProtocol.has(row.slug)) {
+      coverageByProtocol.set(row.slug, { fees: false, revenue: false, holders_revenue: false })
     }
-    if (!latestByProtocol.has(row.protocol_id)) {
-      latestByProtocol.set(row.protocol_id, {})
+    if (!latestByProtocol.has(row.slug)) {
+      latestByProtocol.set(row.slug, {})
     }
 
-    const coverage = coverageByProtocol.get(row.protocol_id)!
+    const coverage = coverageByProtocol.get(row.slug)!
     coverage[row.metric_type] = row.rows > 0
-    const latest = latestByProtocol.get(row.protocol_id)!
+    const latest = latestByProtocol.get(row.slug)!
     latest[row.metric_type] = row.latest_date
   }
 
   return { coverageByProtocol, latestByProtocol }
 }
 
-function aggregateTotals(protocolIds: number[], windows: number[], db: SqliteDatabase): Map<number, Map<number, Record<NormalizedMetricType, number>>> {
-  const result = new Map<number, Map<number, Record<NormalizedMetricType, number>>>()
-  if (!protocolIds.length) return result
+function aggregateTotals(slugs: string[], windows: number[], db: SqliteDatabase): Map<number, Map<string, Record<NormalizedMetricType, number>>> {
+  const result = new Map<number, Map<string, Record<NormalizedMetricType, number>>>()
+  if (!slugs.length) return result
 
-  const placeholders = protocolIds.map(() => '?').join(',')
+  const placeholders = slugs.map(() => '?').join(',')
 
   for (const window of windows) {
     const since = toDateStringFromWindow(window)
     const rows = db
       .prepare(
         `
-        SELECT protocol_id, metric_type, SUM(value_usd) as total
+        SELECT slug, metric_type, SUM(value_usd) as total
         FROM protocol_metrics
-        WHERE protocol_id IN (${placeholders}) AND date >= ?
-        GROUP BY protocol_id, metric_type
+        WHERE slug IN (${placeholders}) AND date >= ?
+        GROUP BY slug, metric_type
       `
       )
-      .all(...protocolIds, since) as AggregateRow[]
+      .all(...slugs, since) as AggregateRow[]
 
     for (const row of rows) {
       if (!result.has(window)) {
         result.set(window, new Map())
       }
       const windowMap = result.get(window)!
-      if (!windowMap.has(row.protocol_id)) {
-        windowMap.set(row.protocol_id, { fees: 0, revenue: 0, holders_revenue: 0 })
+      if (!windowMap.has(row.slug)) {
+        windowMap.set(row.slug, { fees: 0, revenue: 0, holders_revenue: 0 })
       }
-      const metrics = windowMap.get(row.protocol_id)!
+      const metrics = windowMap.get(row.slug)!
       metrics[row.metric_type] = Number(row.total ?? 0)
     }
   }
@@ -274,10 +233,8 @@ export function getTokenAggregates(
     metricPreference?: MetricPreference
     windows?: number[]
     search?: string | null
-    chain?: string | null
     ids?: number[]
-    slugs?: string[]
-    defillamaIds?: string[]
+    slugs: string[]
   },
   db: SqliteDatabase = getDb()
 ): TokenAggregateResponse {
@@ -288,28 +245,26 @@ export function getTokenAggregates(
   const protocols = listProtocols(
     {
       search: options.search,
-      chain: options.chain,
       ids: options.ids,
       slugs: options.slugs,
-      defillamaIds: options.defillamaIds,
       trackedOnly: true,
     },
     db
   )
 
-  const protocolIds = protocols.map((p) => p.id)
-  const { coverageByProtocol, latestByProtocol } = buildCoverage(protocolIds, db)
-  const totals = aggregateTotals(protocolIds, uniqueWindows, db)
+  const slugs = protocols.map((p) => p.slug)
+  const { coverageByProtocol, latestByProtocol } = buildCoverage(slugs, db)
+  const totals = aggregateTotals(slugs, uniqueWindows, db)
 
   const items: TokenAggregate[] = protocols.map((protocol) => {
-    const coverage = coverageByProtocol.get(protocol.id) ?? { fees: false, revenue: false, holders_revenue: false }
-    const latest = latestByProtocol.get(protocol.id) ?? {}
+    const coverage = coverageByProtocol.get(protocol.slug) ?? { fees: false, revenue: false, holders_revenue: false }
+    const latest = latestByProtocol.get(protocol.slug) ?? {}
     const metricUsedWindows: Record<number, NormalizedMetricType | null> = {}
     const windowsTotals: Record<number, number | null> = {}
 
     for (const window of uniqueWindows) {
       const windowMap = totals.get(window)
-      const totalsForProtocol = (windowMap?.get(protocol.id) ?? {}) as Record<NormalizedMetricType, number | undefined>
+      const totalsForProtocol = (windowMap?.get(protocol.slug) ?? {}) as Record<NormalizedMetricType, number | undefined>
       const chosen = chooseMetric(metricPreference, coverage, totalsForProtocol)
       metricUsedWindows[window] = chosen
       windowsTotals[window] = chosen ? totalsForProtocol[chosen] ?? null : null
@@ -333,11 +288,9 @@ export function getTokenAggregates(
 export function getCoverageList(
   options: {
     search?: string | null
-    chain?: string | null
     limit?: number
     ids?: number[]
     slugs?: string[]
-    defillamaIds?: string[]
     trackedOnly?: boolean
   },
   db: SqliteDatabase = getDb()
@@ -345,23 +298,21 @@ export function getCoverageList(
   const protocols = listProtocols(
     {
       search: options.search,
-      chain: options.chain,
       limit: options.limit,
       ids: options.ids,
       slugs: options.slugs,
-      defillamaIds: options.defillamaIds,
       trackedOnly: options.trackedOnly,
     },
     db
   )
 
-  const protocolIds = protocols.map((p) => p.id)
-  const { coverageByProtocol, latestByProtocol } = buildCoverage(protocolIds, db)
+  const slugs = protocols.map((p) => p.slug)
+  const { coverageByProtocol, latestByProtocol } = buildCoverage(slugs, db)
 
   return protocols.map((protocol) => ({
     ...protocol,
-    coverage: coverageByProtocol.get(protocol.id) ?? { fees: false, revenue: false, holders_revenue: false },
-    latestByMetric: latestByProtocol.get(protocol.id) ?? {},
+    coverage: coverageByProtocol.get(protocol.slug) ?? { fees: false, revenue: false, holders_revenue: false },
+    latestByMetric: latestByProtocol.get(protocol.slug) ?? {},
   }))
 }
 
@@ -371,7 +322,7 @@ export function getProtocolSeries(
   },
   db: SqliteDatabase = getDb()
 ): {
-  protocol: ProtocolSummary
+  protocol: StoredProtocol
   available: Record<NormalizedMetricType, number>
   latestByMetric: Partial<Record<NormalizedMetricType, string | null>>
   pointsByMetric: Partial<Record<NormalizedMetricType, { date: string; value: number }[]>>
@@ -384,11 +335,11 @@ export function getProtocolSeries(
       `
       SELECT date, value_usd as value, metric_type
       FROM protocol_metrics
-      WHERE protocol_id = ?
+      WHERE slug = ?
       ORDER BY date ASC
     `
     )
-    .all(protocol.id) as { date: string; value: number; metric_type: NormalizedMetricType }[]
+    .all(protocol.slug) as { date: string; value: number; metric_type: NormalizedMetricType }[]
 
   const available: Record<NormalizedMetricType, number> = { fees: 0, revenue: 0, holders_revenue: 0 }
   const latestByMetric: Partial<Record<NormalizedMetricType, string | null>> = {}

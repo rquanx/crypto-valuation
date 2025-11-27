@@ -1,24 +1,18 @@
-import type { NormalizedMetricType } from './ingest'
-import type { ProtocolSummary } from './queries'
+import type { NormalizedMetricType, StoredProtocol } from './ingest'
 
 export type ActiveMetricType = 'holders_revenue' | 'revenue'
 export type ValuationWindow = 1 | 7 | 30 | 90 | 180 | 365
 export type StoredTracked = {
   slug: string
-  defillamaId?: string
-  protocolId?: number
   name: string
   logo?: string | null
-  category?: string | null
-  chains?: string[]
-  metric?: 'auto' | ActiveMetricType
   pe: number
   enabled: boolean
   addedAt: number
 }
 
 export type ApiSeriesResponse = {
-  protocol: ProtocolSummary
+  protocol: StoredProtocol
   available: Record<NormalizedMetricType, number>
   latestByMetric: Partial<Record<NormalizedMetricType, string | null>>
   pointsByMetric: Partial<Record<NormalizedMetricType, { date: string; value: number }[]>>
@@ -31,7 +25,7 @@ export type MetricDetail = {
 }
 
 export type ComputedToken = {
-  protocol: ProtocolSummary
+  protocol: StoredProtocol
   metricsDetail: Record<ActiveMetricType, MetricDetail>
   latestByMetric: Partial<Record<NormalizedMetricType, string | null>>
 }
@@ -81,11 +75,16 @@ export function sumWindow(points: { date: string; value: number }[] | undefined,
   const cutoff = cutoffDate(window, points[points.length - 1].date)
   let total = 0
   let used = false
-  for (const point of points) {
+  let index = points.length - 1
+  while (index >= 0) {
+    const point = points[index]
     if (point.date >= cutoff) {
       total += point.value
       used = true
+    } else {
+      break
     }
+    index--
   }
   return used ? total : null
 }
@@ -118,25 +117,14 @@ export function computeTokenFromSeries(data: ApiSeriesResponse): ComputedToken {
   }
 }
 
-export function mergeTrackedWithProtocol(tracked: StoredTracked, protocol: ProtocolSummary): StoredTracked {
+export function mergeTrackedWithProtocol(tracked: StoredTracked, protocol: StoredProtocol): StoredTracked {
   return {
     ...tracked,
     name: tracked.name || protocol.displayName || protocol.name || tracked.slug,
-    defillamaId: protocol.defillamaId,
-    protocolId: protocol.id,
     logo: tracked.logo ?? protocol.logo,
-    category: tracked.category ?? protocol.category ?? undefined,
-    chains: tracked.chains ?? protocol.chains,
   }
 }
 
 export function trackedHasDiff(next: StoredTracked, prev: StoredTracked): boolean {
-  return (
-    next.name !== prev.name ||
-    next.defillamaId !== prev.defillamaId ||
-    next.protocolId !== prev.protocolId ||
-    next.logo !== prev.logo ||
-    next.category !== prev.category ||
-    JSON.stringify(next.chains || []) !== JSON.stringify(prev.chains || [])
-  )
+  return next.name !== prev.name || next.logo !== prev.logo
 }

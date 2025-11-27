@@ -4,8 +4,6 @@ import { fetchFeesOverview, fetchProtocolSummary, type ChartPoint, type ChartPoi
 
 export type NormalizedMetricType = 'fees' | 'revenue' | 'holders_revenue'
 export type ProtocolFilter = {
-  protocolIds?: number[]
-  defillamaIds?: string[]
   slugs?: string[]
 }
 
@@ -41,7 +39,7 @@ interface MetricRow {
   source_ts?: number
 }
 
-type ProtocolRow = {
+type ProtocolRawRow = {
   protocol_id: number
   defillama_id: string
   slug: string
@@ -58,127 +56,252 @@ type ProtocolRow = {
   has_label_breakdown: number | null
 }
 
-export interface TrackedProtocolRecord {
-  protocolId: number
-  protocol: OverviewProtocol
-}
+type ProtocolRow = Pick<ProtocolRawRow, 'name' | 'display_name' | 'logo' | 'slug'>
+
+export type StoredProtocol = Pick<OverviewProtocol, 'name' | 'displayName' | 'logo' | 'slug'>
 
 const defaultLogger = (message: string) => console.log(`[ingest] ${message}`)
 
-function protocolRowToOverview(row: ProtocolRow): OverviewProtocol {
+export function protocolRowToStored(row: ProtocolRow): StoredProtocol {
   return {
-    defillamaId: row.defillama_id,
     slug: row.slug,
     name: row.name ?? undefined,
     displayName: row.display_name ?? undefined,
-    protocolType: row.protocol_type ?? undefined,
-    category: row.category ?? undefined,
     logo: row.logo ?? undefined,
-    chains: row.chains ? (JSON.parse(row.chains) as string[]) : [],
-    module: row.module ?? undefined,
-    methodologyURL: row.methodology_url ?? undefined,
-    gecko_id: row.gecko_id ?? undefined,
-    cmcId: row.cmc_id ?? undefined,
-    hasLabelBreakdown: row.has_label_breakdown === 1,
   }
 }
 
-export function getTrackedProtocols(db: SqliteDatabase = getDb()): TrackedProtocolRecord[] {
+export function getTrackedProtocols(db: SqliteDatabase = getDb()): StoredProtocol[] {
   const rows = db
     .prepare(
       `
       SELECT
-        p.id as protocol_id,
-        p.defillama_id,
         p.slug,
         p.name,
         p.display_name,
-        p.protocol_type,
-        p.category,
-        p.chains,
-        p.logo,
-        p.gecko_id,
-        p.cmc_id,
-        p.module,
-        p.methodology_url,
-        p.has_label_breakdown
+        p.logo
       FROM tracked_protocols t
-      JOIN protocols p ON p.id = t.protocol_id
+      JOIN protocols p ON p.slug = t.slug
     `
     )
     .all() as ProtocolRow[]
 
-  return rows.map((row) => ({
-    protocolId: row.protocol_id,
-    protocol: protocolRowToOverview(row),
-  }))
+  return rows.map((row) => protocolRowToStored(row))
 }
 
-function findProtocolBySlugOrId(slugOrId: string, db: SqliteDatabase = getDb()): ProtocolRow | null {
+function findProtocolBySlug(slug: string, db: SqliteDatabase = getDb()): ProtocolRow | null {
   const row = db
     .prepare(
       `
       SELECT
-        id as protocol_id,
-        defillama_id,
         slug,
         name,
         display_name,
-        protocol_type,
-        category,
-        chains,
         logo,
-        gecko_id,
-        cmc_id,
-        module,
-        methodology_url,
-        has_label_breakdown
       FROM protocols
-      WHERE lower(slug) = lower(?) OR lower(defillama_id) = lower(?)
-      LIMIT 1
+      WHERE slug = ? LIMIT 1
     `
     )
-    .get(slugOrId, slugOrId) as ProtocolRow | undefined
+    .get(slug) as ProtocolRow | undefined
   return row ?? null
 }
 
-function filterTracked(tracked: TrackedProtocolRecord[], filter?: ProtocolFilter): TrackedProtocolRecord[] {
-  if (!filter) return tracked
-  const idSet = new Set(filter.protocolIds ?? [])
-  const llamaSet = new Set((filter.defillamaIds ?? []).map((id) => id.toLowerCase()))
-  const slugSet = new Set((filter.slugs ?? []).map((s) => s.toLowerCase()))
-
-  return tracked.filter((item) => {
-    const pidMatch = idSet.size ? idSet.has(item.protocolId) : false
-    const llamaMatch = llamaSet.size ? llamaSet.has(item.protocol.defillamaId.toLowerCase()) : false
-    const slugMatch = slugSet.size ? slugSet.has(item.protocol.slug.toLowerCase()) : false
-    return idSet.size || llamaSet.size || slugSet.size ? pidMatch || llamaMatch || slugMatch : true
-  })
+function ensureArray(value: string[] | undefined | null): string[] {
+  if (!value) return []
+  return value.filter((item) => typeof item === 'string' && item.trim().length > 0)
 }
 
-export async function addTrackedProtocolBySlug(slugOrId: string, db: SqliteDatabase = getDb()): Promise<{ created: boolean; protocolId: number; protocol: OverviewProtocol }> {
-  const existing = findProtocolBySlugOrId(slugOrId, db)
-  let protocolId: number
-  let protocol: OverviewProtocol
+function extractParentSlug(parentProtocol?: string | null): string | null {
+  if (!parentProtocol) return null
+  const [, slugPart] = parentProtocol.split('#')
+  return (slugPart || parentProtocol || '').trim() || null
+}
 
-  if (existing) {
-    protocolId = existing.protocol_id
-    protocol = protocolRowToOverview(existing)
-  } else {
-    const overview = await fetchFeesOverview()
-    const matched = overview.protocols.find((item) => item.slug.toLowerCase() === slugOrId.toLowerCase() || item.defillamaId.toLowerCase() === slugOrId.toLowerCase()) ?? null
+function buildAggregatedProtocols(rawProtocols: OverviewProtocol[]): StoredProtocol[] {
+  const byName = new Map<string, OverviewProtocol[]>()
 
-    if (!matched) {
-      throw new Error(`Protocol not found for slug/id: ${slugOrId}`)
-    }
-
-    protocolId = upsertProtocol(db, matched)
-    protocol = matched
+  for (const protocol of rawProtocols) {
+    if (!protocol.name) continue
+    const key = protocol.name
+    const list = byName.get(key) ?? []
+    list.push(protocol)
+    byName.set(key, list)
   }
 
-  const res = db.prepare('INSERT INTO tracked_protocols (protocol_id) VALUES (?) ON CONFLICT(protocol_id) DO NOTHING').run(protocolId)
+  const aggregated = new Map<string, StoredProtocol>()
 
-  return { created: res.changes > 0, protocolId, protocol }
+  for (const protocol of rawProtocols) {
+    const parentSlug = extractParentSlug(protocol.parentProtocol)
+    if (!parentSlug) {
+      if (!aggregated.has(protocol.slug)) {
+        aggregated.set(protocol.slug, {
+          name: protocol.name,
+          displayName: protocol.displayName,
+          slug: protocol.slug,
+          logo: protocol.logo,
+        })
+      }
+      continue
+    }
+    if (aggregated.has(parentSlug)) {
+      continue
+    }
+
+    const linked = ensureArray(protocol.linkedProtocols)
+
+    // 当前 parentSlug 关联的所有 protocols
+    const matched = linked.map((name) => byName.get(name)?.[0]).filter((item): item is OverviewProtocol => Boolean(item))
+
+    const sourceProtocols = matched.length ? matched : [protocol]
+    const base = sourceProtocols[0] ?? protocol
+    const slug = parentSlug
+    const name = linked[0]
+    const displayName = linked[0]
+
+    aggregated.set(slug, {
+      slug,
+      name,
+      displayName,
+      logo: base.logo ?? protocol.logo,
+    })
+  }
+
+  return Array.from(aggregated.values())
+}
+
+function upsertRawProtocols(db: SqliteDatabase, protocols: OverviewProtocol[]): number {
+  if (!protocols.length) return 0
+  const statement = db.prepare(
+    `
+    INSERT INTO protocols_raw (
+      defillama_id, slug, name, display_name, protocol_type, category, chains, logo,
+      gecko_id, cmc_id, module, methodology_url, has_label_breakdown, parent_protocol, linked_protocols, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(defillama_id) DO UPDATE SET
+      slug=excluded.slug,
+      name=excluded.name,
+      display_name=excluded.display_name,
+      protocol_type=excluded.protocol_type,
+      category=excluded.category,
+      chains=excluded.chains,
+      logo=excluded.logo,
+      gecko_id=excluded.gecko_id,
+      cmc_id=excluded.cmc_id,
+      module=excluded.module,
+      methodology_url=excluded.methodology_url,
+      has_label_breakdown=excluded.has_label_breakdown,
+      parent_protocol=excluded.parent_protocol,
+      linked_protocols=excluded.linked_protocols,
+      updated_at=CURRENT_TIMESTAMP
+    ;
+  `
+  )
+
+  const run = db.transaction((items: OverviewProtocol[]) => {
+    let count = 0
+    for (const protocol of items) {
+      statement.run(
+        protocol.defillamaId,
+        protocol.slug,
+        protocol.name ?? null,
+        protocol.displayName ?? protocol.name ?? null,
+        protocol.protocolType ?? null,
+        protocol.category ?? null,
+        JSON.stringify(protocol.chains ?? []),
+        protocol.logo ?? null,
+        protocol.gecko_id ?? null,
+        protocol.cmcId ?? null,
+        protocol.module ?? null,
+        protocol.methodologyURL ?? null,
+        protocol.hasLabelBreakdown ? 1 : 0,
+        protocol.parentProtocol ?? null,
+        protocol.linkedProtocols ? JSON.stringify(ensureArray(protocol.linkedProtocols)) : null
+      )
+      count += 1
+    }
+    return count
+  })
+
+  return run(protocols)
+}
+
+function upsertProcessedProtocol(db: SqliteDatabase, protocol: StoredProtocol): string {
+  const statement = db.prepare(
+    `
+    INSERT INTO protocols (
+      slug, name, display_name, logo, updated_at
+    )
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(slug) DO UPDATE SET
+      slug=excluded.slug,
+      name=excluded.name,
+      display_name=excluded.display_name,
+      logo=excluded.logo,
+      updated_at=CURRENT_TIMESTAMP
+    ;
+  `
+  )
+
+  statement.run(protocol.slug, protocol.name ?? null, protocol.displayName ?? protocol.name ?? null, protocol.logo ?? null)
+
+  const row = db.prepare('SELECT slug FROM protocols WHERE slug = ?').get(protocol.slug) as { slug: string } | undefined
+  if (!row) {
+    throw new Error(`Failed to fetch protocol row for ${protocol.slug}`)
+  }
+  return row.slug
+}
+
+function syncCatalogFromOverview(db: SqliteDatabase, protocols: OverviewProtocol[]): StoredProtocol[] {
+  if (!protocols.length) return []
+  upsertRawProtocols(db, protocols)
+  const aggregated = buildAggregatedProtocols(protocols)
+  const run = db.transaction((items: StoredProtocol[]) => {
+    for (const protocol of items) {
+      upsertProcessedProtocol(db, protocol)
+    }
+    return items
+  })
+  return run(aggregated)
+}
+
+function findProtocolBySlugOrId(slug: string, db: SqliteDatabase = getDb()): ProtocolRow | null {
+  const row = db
+    .prepare(
+      `
+      SELECT
+        slug,
+        name,
+        display_name,
+        logo
+      FROM protocols
+      WHERE slug= ?
+      LIMIT 1
+    `
+    )
+    .get(slug) as ProtocolRow | undefined
+  return row ?? null
+}
+
+export async function addTrackedProtocolBySlug(slugOrId: string, db: SqliteDatabase = getDb()): Promise<{ created: boolean; slug: string; protocol: StoredProtocol }> {
+  applySchema()
+  let existing = findProtocolBySlugOrId(slugOrId, db)
+
+  if (!existing) {
+    const overview = await fetchFeesOverview()
+    syncCatalogFromOverview(db, overview.protocols || [])
+    existing = findProtocolBySlugOrId(slugOrId, db)
+  }
+
+  if (!existing) {
+    throw new Error(`Protocol not found for slug/id: ${slugOrId}`)
+  }
+
+  const protocol = protocolRowToStored(existing)
+
+  const res = db.prepare('INSERT INTO tracked_protocols (slug) VALUES (?) ON CONFLICT(slug) DO NOTHING').run(protocol.slug)
+
+  return { created: res.changes > 0, slug: protocol.slug, protocol }
 }
 
 function toDateString(timestampSeconds: number): string {
@@ -222,80 +345,31 @@ function chartToRows(points: ChartPoint[]): MetricRow[] {
     .filter((row) => Boolean(row && Number.isFinite(row.value))) as MetricRow[]
 }
 
-export function upsertProtocol(db: SqliteDatabase, protocol: OverviewProtocol): number {
-  const statement = db.prepare(
-    `
-    INSERT INTO protocols (
-      defillama_id, slug, name, display_name, protocol_type, category, chains, logo,
-      gecko_id, cmc_id, module, methodology_url, has_label_breakdown, updated_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(defillama_id) DO UPDATE SET
-      slug=excluded.slug,
-      name=excluded.name,
-      display_name=excluded.display_name,
-      protocol_type=excluded.protocol_type,
-      category=excluded.category,
-      chains=excluded.chains,
-      logo=excluded.logo,
-      gecko_id=excluded.gecko_id,
-      cmc_id=excluded.cmc_id,
-      module=excluded.module,
-      methodology_url=excluded.methodology_url,
-      has_label_breakdown=excluded.has_label_breakdown,
-      updated_at=CURRENT_TIMESTAMP
-    ;
-  `
-  )
-
-  statement.run(
-    protocol.defillamaId,
-    protocol.slug,
-    protocol.name ?? null,
-    protocol.displayName ?? protocol.name ?? null,
-    protocol.protocolType ?? null,
-    protocol.category ?? null,
-    JSON.stringify(protocol.chains ?? []),
-    protocol.logo ?? null,
-    protocol.gecko_id ?? null,
-    protocol.cmcId ?? null,
-    protocol.module ?? null,
-    protocol.methodologyURL ?? null,
-    protocol.hasLabelBreakdown ? 1 : 0
-  )
-
-  const row = db.prepare('SELECT id FROM protocols WHERE defillama_id = ?').get(protocol.defillamaId) as { id: number } | undefined
-  if (!row) {
-    throw new Error(`Failed to fetch protocol row for ${protocol.defillamaId}`)
-  }
-  return row.id
-}
-
-function getCursor(db: SqliteDatabase, protocolId: number, metric: NormalizedMetricType): string | null {
-  const row = db.prepare('SELECT last_date as lastDate FROM ingest_cursors WHERE protocol_id = ? AND metric_type = ?').get(protocolId, metric) as { lastDate: string | null } | undefined
+function getCursor(db: SqliteDatabase, slug: string, metric: NormalizedMetricType): string | null {
+  const row = db.prepare('SELECT last_date as lastDate FROM ingest_cursors WHERE slug = ? AND metric_type = ?').get(slug, metric) as { lastDate: string | null } | undefined
   return row?.lastDate ?? null
 }
 
-function updateCursor(db: SqliteDatabase, protocolId: number, metric: NormalizedMetricType, lastDate: string): void {
+function updateCursor(db: SqliteDatabase, slug: string, metric: NormalizedMetricType, lastDate: string): void {
   db.prepare(
     `
-    INSERT INTO ingest_cursors (protocol_id, metric_type, last_date)
+    INSERT INTO ingest_cursors (slug, metric_type, last_date)
     VALUES (?, ?, ?)
-    ON CONFLICT(protocol_id, metric_type) DO UPDATE SET last_date=excluded.last_date;
+    ON CONFLICT(slug, metric_type) DO UPDATE SET last_date=excluded.last_date;
   `
-  ).run(protocolId, metric, lastDate)
+  ).run(slug, metric, lastDate)
 }
 
-function insertMetricRows(db: SqliteDatabase, protocolId: number, metric: NormalizedMetricType, rows: MetricRow[]): { written: number; lastDate?: string } {
+function insertMetricRows(db: SqliteDatabase, slug: string, metric: NormalizedMetricType, rows: MetricRow[]): { written: number; lastDate?: string } {
   if (!rows.length) {
     return { written: 0, lastDate: undefined }
   }
 
   const insert = db.prepare(
     `
-    INSERT INTO protocol_metrics (protocol_id, metric_type, date, value_usd, breakdown_json, source_ts, updated_at)
+    INSERT INTO protocol_metrics (slug, metric_type, date, value_usd, breakdown_json, source_ts, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(protocol_id, metric_type, date) DO UPDATE SET
+    ON CONFLICT(slug, metric_type, date) DO UPDATE SET
       value_usd=excluded.value_usd,
       breakdown_json=excluded.breakdown_json,
       source_ts=excluded.source_ts,
@@ -306,7 +380,7 @@ function insertMetricRows(db: SqliteDatabase, protocolId: number, metric: Normal
   const result = db.transaction((batch: MetricRow[]) => {
     let written = 0
     for (const row of batch) {
-      const res: RunResult = insert.run(protocolId, metric, row.date, row.value, row.breakdown_json ?? null, row.source_ts ?? null)
+      const res: RunResult = insert.run(slug, metric, row.date, row.value, row.breakdown_json ?? null, row.source_ts ?? null)
       written += res.changes
     }
     return written
@@ -318,8 +392,7 @@ function insertMetricRows(db: SqliteDatabase, protocolId: number, metric: Normal
 
 async function processProtocolMetric(
   db: SqliteDatabase,
-  protocol: OverviewProtocol,
-  protocolId: number,
+  protocol: StoredProtocol,
   metric: NormalizedMetricType,
   logger: (message: string) => void,
   errors: string[],
@@ -334,7 +407,7 @@ async function processProtocolMetric(
       return 0
     }
 
-    const lastDate = getCursor(db, protocolId, metric)
+    const lastDate = getCursor(db, protocol.slug, metric)
     const cutoffDate = lastDate && BACKFILL_DAYS > 0 ? toDateString(Math.max(0, Math.floor((Date.parse(lastDate) - BACKFILL_DAYS * 24 * 3600 * 1000) / 1000))) : null
 
     const filtered = cutoffDate ? rows.filter((row) => row.date >= cutoffDate) : rows
@@ -344,13 +417,10 @@ async function processProtocolMetric(
       return filtered.length
     }
 
-    const { written, lastDate: newestDate } = insertMetricRows(db, protocolId, metric, filtered)
+    const { written, lastDate: newestDate } = insertMetricRows(db, protocol.slug, metric, filtered)
 
     if (newestDate) {
-      updateCursor(db, protocolId, metric, newestDate)
-    }
-    if (summary.hasLabelBreakdown) {
-      db.prepare('UPDATE protocols SET has_label_breakdown = 1 WHERE id = ?').run(protocolId)
+      updateCursor(db, protocol.slug, metric, newestDate)
     }
 
     return written
@@ -373,6 +443,16 @@ async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T
     }
   })
   await Promise.all(runners)
+}
+
+function filterTracked(tracked: StoredProtocol[], filter?: ProtocolFilter): StoredProtocol[] {
+  if (!filter) return tracked
+  const slugSet = new Set((filter.slugs ?? []).map((s) => s.toLowerCase()))
+
+  return tracked.filter((item) => {
+    const slugMatch = slugSet.size ? slugSet.has(item.slug.toLowerCase()) : false
+    return slugSet.size ? slugMatch : true
+  })
 }
 
 export async function ingestDefillama(options: IngestOptions = {}): Promise<IngestResult> {
@@ -400,7 +480,7 @@ export async function ingestDefillama(options: IngestOptions = {}): Promise<Inge
       protocolsProcessed += 1
 
       for (const metric of metricTypes) {
-        const written = await processProtocolMetric(db, item.protocol, item.protocolId, metric, logger, errors, Boolean(options.dryRun))
+        const written = await processProtocolMetric(db, item, metric, logger, errors, Boolean(options.dryRun))
         pointsWritten += written
       }
     })
@@ -419,17 +499,13 @@ export async function ingestDefillama(options: IngestOptions = {}): Promise<Inge
   }
 }
 
-export async function syncProtocolCatalog(options: { logger?: (msg: string) => void } = {}): Promise<{ protocolsSeen: number }> {
+export async function syncProtocolCatalog(options: { logger?: (msg: string) => void } = {}): Promise<{ protocolsSeen: number; rawProtocolsSeen: number }> {
   const logger = options.logger ?? defaultLogger
   applySchema()
   const db = getDb()
   const overview = await fetchFeesOverview()
   const protocols = overview.protocols || []
-  let seen = 0
-  for (const protocol of protocols) {
-    upsertProtocol(db, protocol)
-    seen += 1
-  }
-  logger(`Catalog sync finished, protocols=${seen}`)
-  return { protocolsSeen: seen }
+  const aggregated = syncCatalogFromOverview(db, protocols)
+  logger(`Catalog sync finished, raw=${protocols.length}, processed=${aggregated.length}`)
+  return { protocolsSeen: aggregated.length, rawProtocolsSeen: protocols.length }
 }
