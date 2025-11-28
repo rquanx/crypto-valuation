@@ -17,7 +17,10 @@ export function MetricSummaryCard({ metric, detail, pe }: { metric: ActiveMetric
           const total = detail?.totals?.[window] ?? null
           const valuation = computeAnnualizedValuation(total, window, pe)
           return (
-            <div key={window} className="flex justify-between rounded-lg border border-white/10 bg-[#0f1b2c]/70 p-3">
+            <div
+              key={window}
+              className="flex justify-between rounded-lg border border-white/10 bg-[#0f1b2c]/70 p-3 transition-all duration-300 ease-out hover:border-[#6df2c8]/40 hover:-translate-y-[3px]"
+            >
               <div>
                 <div className="text-[11px] uppercase text-[#7c8ba7]">{WINDOW_LABELS[window]}</div>
                 <div className="text-sm font-semibold text-[#f6fbff]">{(total || 0) > 1e8 ? formatYi(total) : formatUSD(total)}</div>

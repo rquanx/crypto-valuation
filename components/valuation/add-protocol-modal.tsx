@@ -93,7 +93,7 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
                       key={item.slug}
                       onClick={() => setSelectedSlug(item.slug)}
                       className={cn(
-                        'group flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition',
+                        'group flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition-all duration-200 ease-out hover:-translate-y-[2px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#57c7ff]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a101b]',
                         chosen
                           ? 'border-[#6df2c8]/70 bg-[#6df2c8]/10 shadow-[0_16px_60px_-32px_rgba(87,199,255,0.5)]'
                           : 'border-white/10 bg-white/5 hover:border-[#57c7ff]/50 hover:bg-[#0f1b2c]/80'
