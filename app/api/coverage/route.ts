@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getCoverageList } from '@/lib/queries'
 
 export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
+
+const parsedCacheSeconds = Number(process.env.API_CACHE_SECONDS)
+const CACHE_TTL_SECONDS = Number.isFinite(parsedCacheSeconds) && parsedCacheSeconds > 0 ? parsedCacheSeconds : 43200
+const CACHE_CONTROL_HEADER = `public, max-age=${CACHE_TTL_SECONDS}, s-maxage=${CACHE_TTL_SECONDS}, stale-while-revalidate=${CACHE_TTL_SECONDS}`
+export const revalidate = CACHE_TTL_SECONDS
 
 function parseLimit(value: string | null): number {
   const parsed = Number(value)
@@ -55,7 +59,9 @@ export async function GET(request: NextRequest) {
       slugs,
       ids,
     })
-    return NextResponse.json({ ok: true, items })
+    const response = NextResponse.json({ ok: true, items })
+    response.headers.set('Cache-Control', CACHE_CONTROL_HEADER)
+    return response
   } catch (error) {
     return NextResponse.json({ ok: false, error: (error as Error).message }, { status: 500 })
   }
