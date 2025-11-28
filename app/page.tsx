@@ -108,7 +108,7 @@ export default function Home() {
           </div>
 
           <div className="space-y-4">
-            {!filteredTracked.length ? (
+            {!filteredTracked.length && typeof window !== 'undefined' ? (
               <EmptyState onAdd={() => setShowModal(true)} search={search} />
             ) : (
               filteredTracked.map((item) => <TrackedCard key={item.slug} item={item} refreshNonce={refreshNonce} onPeChange={handlePeChange} onRemove={handleRemove} onMetaUpdate={handleMetaUpdate} />)
