@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { authorizeRequest } from '@/lib/api'
 import { syncProtocolCatalog } from '@/lib/ingest'
 import { triggerIngestNow } from '@/lib/scheduler'
 
@@ -7,22 +8,13 @@ export const dynamic = 'force-dynamic'
 
 type SchedulerJob = 'ingest' | 'catalog'
 
-function authorize(request: NextRequest): boolean {
-  const secret = process.env.INGEST_SECRET
-  if (!secret) return true
-
-  const headerToken = request.headers.get('x-ingest-secret')
-  const queryToken = request.nextUrl.searchParams.get('token')
-  return headerToken === secret || queryToken === secret
-}
-
 function parseJob(request: NextRequest, payload?: { job?: string | null }): SchedulerJob {
   const job = payload?.job ?? request.nextUrl.searchParams.get('job') ?? 'ingest'
   return job === 'catalog' ? 'catalog' : 'ingest'
 }
 
 async function handleRequest(request: NextRequest, payload?: { job?: string | null }) {
-  if (!authorize(request)) {
+  if (!authorizeRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

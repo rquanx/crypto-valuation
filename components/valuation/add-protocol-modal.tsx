@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -7,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { LoadingPulse } from '@/components/valuation/loading-pulse'
+import { ProtocolAvatar } from '@/components/valuation/protocol-avatar'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { CoverageItem } from '@/lib/queries'
@@ -88,6 +88,7 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
               ) : (
                 options.map((item) => {
                   const chosen = selectedSlug === item.slug
+                  const displayName = item.displayName || item.name || item.slug
                   return (
                     <button
                       key={item.slug}
@@ -98,15 +99,9 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
                       )}
                     >
                       <div className="flex items-center gap-3">
-                        {item.logo ? (
-                          <img src={item.logo} alt={item.displayName ?? item.name ?? item.slug} className="h-10 w-10 rounded-full border border-white/10 object-cover" />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-[#0f1b2c] text-sm text-[#e6edf7]">
-                            {(item.displayName || item.name || item.slug).slice(0, 2).toUpperCase()}
-                          </div>
-                        )}
+                        <ProtocolAvatar logo={item.logo} label={displayName} size="sm" />
                         <div>
-                          <div className="text-sm font-semibold text-[#f6fbff]">{item.displayName || item.name || item.slug}</div>
+                          <div className="text-sm font-semibold text-[#f6fbff]">{displayName}</div>
                         </div>
                       </div>
                     </button>

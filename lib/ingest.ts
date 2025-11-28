@@ -89,23 +89,6 @@ export function getTrackedProtocols(db: SqliteDatabase = getDb()): StoredProtoco
   return rows.map((row) => protocolRowToStored(row))
 }
 
-function findProtocolBySlug(slug: string, db: SqliteDatabase = getDb()): ProtocolRow | null {
-  const row = db
-    .prepare(
-      `
-      SELECT
-        slug,
-        name,
-        display_name,
-        logo,
-      FROM protocols
-      WHERE slug = ? LIMIT 1
-    `
-    )
-    .get(slug) as ProtocolRow | undefined
-  return row ?? null
-}
-
 function ensureArray(value: string[] | undefined | null): string[] {
   if (!value) return []
   return value.filter((item) => typeof item === 'string' && item.trim().length > 0)

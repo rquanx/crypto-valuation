@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 'use client'
 
 import { useEffect, useMemo } from 'react'
@@ -9,6 +8,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { LoadingPulse } from '@/components/valuation/loading-pulse'
 import { MetricSummaryCard } from '@/components/valuation/metric-summary-card'
+import { ProtocolAvatar } from '@/components/valuation/protocol-avatar'
 import { computeTokenFromSeries, mergeTrackedWithProtocol, trackedHasDiff, type ApiSeriesResponse, type StoredTracked } from '@/lib/valuation'
 
 type TrackedCardProps = {
@@ -53,13 +53,7 @@ export function TrackedCard({ item, refreshNonce, onPeChange, onRemove, onMetaUp
     <Card className="border-white/10 bg-[radial-gradient(circle_at_14%_12%,rgba(109,242,200,0.08),transparent_28%),radial-gradient(circle_at_90%_10%,rgba(87,199,255,0.08),transparent_30%),linear-gradient(145deg,#0d1a2c_0%,#0b1322_50%,#0a101c_100%)]">
       <CardHeader className="sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          {logo ? (
-            <img src={logo} alt={displayName} className="h-12 w-12 rounded-full border border-white/10 object-cover" />
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-[#0f1b2c] text-lg font-semibold text-[#e6edf7]">
-              {displayName.slice(0, 2).toUpperCase()}
-            </div>
-          )}
+          <ProtocolAvatar logo={logo} label={displayName} size="md" />
           <div>
             <div className="text-lg font-semibold text-[#f6fbff]">{displayName}</div>
           </div>
