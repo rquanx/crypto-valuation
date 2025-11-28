@@ -5,15 +5,6 @@ import { triggerIngestNow } from '@/lib/scheduler'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-function authorize(request: NextRequest): boolean {
-  const secret = process.env.INGEST_SECRET
-  if (!secret) return true
-
-  const headerToken = request.headers.get('x-ingest-secret')
-  const queryToken = request.nextUrl.searchParams.get('token')
-  return headerToken === secret || queryToken === secret
-}
-
 function parseMetricTypes(param: string | null): NormalizedMetricType[] | undefined {
   if (!param) return undefined
   const allowed: NormalizedMetricType[] = ['fees', 'revenue', 'holders_revenue']
@@ -37,10 +28,6 @@ function parseProtocolFilter(request: NextRequest): ProtocolFilter | undefined {
   return Object.keys(filter).length ? filter : undefined
 }
 export async function GET(request: NextRequest) {
-  if (!authorize(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   const filter = parseProtocolFilter(request)
   const items = getTrackedProtocols().filter((item) => {
     if (!filter) return true
@@ -50,10 +37,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ items })
 }
 export async function POST(request: NextRequest) {
-  if (!authorize(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   let payload: { slug?: string; metrics?: string } | null = null
   try {
     payload = await request.json()
