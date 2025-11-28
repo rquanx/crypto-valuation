@@ -36,13 +36,7 @@ function parseStringList(param: string | null): string[] | undefined {
   return values.length ? Array.from(new Set(values)) : undefined
 }
 
-function parseNumberList(param: string | null): number[] | undefined {
-  const values = parseStringList(param)
-  if (!values) return undefined
-  const numbers = values.map((v) => Number(v)).filter((v) => Number.isFinite(v))
-  return numbers.length ? numbers : undefined
-}
-
+// 提供外部触发数据同步能力
 export async function POST(request: NextRequest) {
   if (!authorize(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
