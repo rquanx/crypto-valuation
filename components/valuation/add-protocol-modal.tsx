@@ -82,7 +82,7 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索名称、Slug 或链" />
               {optionsLoading ? <LoadingPulse label="加载中" /> : null}
             </div>
-            <div className="mt-3 max-h-[360px] space-y-2 overflow-auto pr-1 ">
+            <div className="mt-3 max-h-[360px] space-y-2 overflow-auto pr-1 pt-1">
               {options.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-white/10 p-3 text-sm text-[#9cb2d1]">没有匹配的协议</div>
               ) : (
@@ -94,9 +94,7 @@ export function AddProtocolModal({ open, onClose, onAdd }: AddProtocolModalProps
                       onClick={() => setSelectedSlug(item.slug)}
                       className={cn(
                         'group flex w-full items-center justify-between rounded-xl border px-3 py-3 text-left transition-all duration-200 ease-out hover:-translate-y-[2px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#57c7ff]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a101b]',
-                        chosen
-                          ? 'border-[#6df2c8]/70 bg-[#6df2c8]/10 shadow-[0_16px_60px_-32px_rgba(87,199,255,0.5)]'
-                          : 'border-white/10 bg-white/5 hover:border-[#57c7ff]/50 hover:bg-[#0f1b2c]/80'
+                        chosen ? 'border-[#6df2c8]/70 bg-[#6df2c8]/10 shadow-[0_16px_60px_-32px_rgba(87,199,255,0.5)]' : 'border-white/10 bg-white/5 hover:border-[#57c7ff]/50 hover:bg-[#0f1b2c]/80'
                       )}
                     >
                       <div className="flex items-center gap-3">
