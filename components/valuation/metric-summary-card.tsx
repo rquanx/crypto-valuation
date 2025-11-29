@@ -4,6 +4,7 @@ import { ProtocolBadge } from '@/components/valuation/protocol-badge'
 import { WINDOWS, WINDOW_LABELS, computeAnnualizedValuation, formatUSD, formatYi, metricLabel, type ActiveMetricType, type MetricDetail } from '@/lib/valuation'
 
 export function MetricSummaryCard({ metric, detail, pe }: { metric: ActiveMetricType; detail?: MetricDetail; pe: number }) {
+  const isHolder = metric === 'holders_revenue'
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm">
       <div className="flex items-center justify-between">
@@ -25,10 +26,12 @@ export function MetricSummaryCard({ metric, detail, pe }: { metric: ActiveMetric
                 <div className="text-[11px] uppercase text-[#7c8ba7]">{WINDOW_LABELS[window]}</div>
                 <div className="text-sm font-semibold text-[#f6fbff]">{(total || 0) > 1e8 ? formatYi(total) : formatUSD(total)}</div>
               </div>
-              <div>
-                <div className="text-[11px] text-[#7c8ba7]">估值</div>
-                <div className="text-sm font-semibold text-[#6df2c8]">{formatYi(valuation)}</div>
-              </div>
+              {!isHolder && (
+                <div>
+                  <div className="text-[11px] text-[#7c8ba7]">估值</div>
+                  <div className="text-sm font-semibold text-[#6df2c8]">{formatYi(valuation)}</div>
+                </div>
+              )}
             </div>
           )
         })}
