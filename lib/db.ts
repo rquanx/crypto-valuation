@@ -97,12 +97,36 @@ export function applySchema(db: SqliteDatabase = getDb()): void {
       FOREIGN KEY(slug) REFERENCES protocols(slug) ON DELETE CASCADE
     );
 
+  `)
+
+  ensureTrackedProtocolSchema(db)
+}
+
+function ensureTrackedProtocolSchema(db: SqliteDatabase): void {
+  db.exec(`
     CREATE TABLE IF NOT EXISTS tracked_protocols (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       slug TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(slug)
     );
   `)
+
+  const columns = db.prepare(`PRAGMA table_info('tracked_protocols')`).all() as { name: string }[]
+  const columnNames = new Set(columns.map((col) => col.name))
+
+  // SQLite 不允许在 ALTER TABLE 中使用非常量默认值，新增列后统一回填当前时间。
+  if (!columnNames.has('created_at')) {
+    db.prepare('ALTER TABLE tracked_protocols ADD COLUMN created_at DATETIME').run()
+  }
+  if (!columnNames.has('last_read_at')) {
+    db.prepare('ALTER TABLE tracked_protocols ADD COLUMN last_read_at DATETIME').run()
+  }
+
+  db.prepare('UPDATE tracked_protocols SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)').run()
+  db.prepare('UPDATE tracked_protocols SET last_read_at = COALESCE(last_read_at, CURRENT_TIMESTAMP)').run()
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_tracked_protocols_last_read_at ON tracked_protocols(last_read_at)').run()
 }
 
 export function runInTransaction<T>(fn: (db: SqliteDatabase) => T, db: SqliteDatabase = getDb()): T {

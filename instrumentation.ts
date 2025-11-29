@@ -2,16 +2,18 @@ import cron, { type ScheduledTask } from 'node-cron'
 
 export const runtime = 'nodejs'
 
-const CRON_SCHEDULE = process.env.INGEST_CRON || '10 1 * * *' // 01:10 UTC daily
-const CATALOG_CRON = process.env.CATALOG_CRON || '0 2 * * *'
+const PRUNE_CRON = process.env.TRACKED_PRUNE_CRON || '0 1 * * *' // 1 点进行长期未使用的 icon 清理
+const CATALOG_CRON = process.env.CATALOG_CRON || '30 1 * * *' // 1.30 进行币信息同步
+const CRON_SCHEDULE = process.env.INGEST_CRON || '0 2 * * *' // 2 进行数据收集
 const RUN_ON_BOOT = process.env.INGEST_RUN_ON_BOOT !== 'false'
 const DISABLE_SCHEDULER = process.env.DISABLE_INGEST_SCHEDULER === 'true'
 
-type SchedulerJob = 'ingest' | 'catalog'
+type SchedulerJob = 'ingest' | 'catalog' | 'prune'
 
 type SchedulerState = {
   ingestJob?: ScheduledTask
   catalogJob?: ScheduledTask
+  pruneJob?: ScheduledTask
   initialized?: boolean
   baseUrl?: string
 }
@@ -28,10 +30,7 @@ function getState(): SchedulerState {
 }
 
 function resolveBaseUrl(): string {
-  const explicit =
-    process.env.SCHEDULER_BASE_URL ||
-    process.env.SCHEDULER_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL
+  const explicit = process.env.SCHEDULER_BASE_URL || process.env.SCHEDULER_URL || process.env.NEXT_PUBLIC_SITE_URL
   if (explicit) {
     return explicit.replace(/\/$/, '')
   }
@@ -70,7 +69,7 @@ async function callScheduler(job: SchedulerJob) {
   }
 }
 
-function startCronRequests(): void {
+async function startCronRequests() {
   const state = getState()
   if (state.initialized) return
   state.initialized = true
@@ -108,9 +107,23 @@ function startCronRequests(): void {
     console.log(`[scheduler-cron] Ingest cron started (${CRON_SCHEDULE} UTC) -> ${state.baseUrl}`)
   }
 
+  if (!cron.validate(PRUNE_CRON)) {
+    console.error(`[scheduler-cron] Invalid prune cron expression "${PRUNE_CRON}", prune not started`)
+  } else {
+    state.pruneJob = cron.schedule(
+      PRUNE_CRON,
+      () => {
+        void callScheduler('prune')
+      },
+      { timezone: 'UTC' }
+    )
+    console.log(`[scheduler-cron] Prune cron started (${PRUNE_CRON} UTC) -> ${state.baseUrl}`)
+  }
+
   if (RUN_ON_BOOT) {
-    void callScheduler('catalog')
-    void callScheduler('ingest')
+    await callScheduler('prune')
+    await callScheduler('catalog')
+    await callScheduler('ingest')
   }
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { API_CACHE_CONTROL_HEADER, API_CACHE_TTL_SECONDS, parseStringList } from '@/lib/api'
+import { touchTracked } from '@/lib/ingest'
 import { getCoverageList } from '@/lib/queries'
 
 export const runtime = 'nodejs'

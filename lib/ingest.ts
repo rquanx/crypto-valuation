@@ -1,5 +1,5 @@
 import type { Database as SqliteDatabase, RunResult } from 'better-sqlite3'
-import { applySchema, getDb } from './db'
+import { getDb } from './db'
 import { fetchFeesOverview, fetchProtocolSummary, type ChartPoint, type ChartPointValue, type MetricApiType, type OverviewProtocol } from './defillama'
 
 export type NormalizedMetricType = 'fees' | 'revenue' | 'holders_revenue'
@@ -17,6 +17,7 @@ const DEFAULT_METRICS: NormalizedMetricType[] = ['holders_revenue', 'revenue', '
 
 const DEFAULT_CONCURRENCY = Number(process.env.INGEST_CONCURRENCY || 3)
 const BACKFILL_DAYS = Number(process.env.INGEST_BACKFILL_DAYS || 5)
+const DEFAULT_TRACKED_TTL_DAYS = 30
 
 export interface IngestOptions {
   metricTypes?: NormalizedMetricType[]
@@ -62,6 +63,19 @@ export type StoredProtocol = Pick<OverviewProtocol, 'name' | 'displayName' | 'lo
 
 const defaultLogger = (message: string) => console.log(`[ingest] ${message}`)
 
+function resolveTrackedTtlDays(override: number = 0): number {
+  if (Number.isInteger(override) && override > 0) return override
+
+  const envValue = Number.parseInt(process.env.TRACKED_PROTOCOL_TTL_DAYS ?? '', 10)
+  if (Number.isInteger(envValue) && envValue > 0) return envValue
+
+  return DEFAULT_TRACKED_TTL_DAYS
+}
+
+export function getTrackedProtocolTtlDays(): number {
+  return resolveTrackedTtlDays()
+}
+
 export function protocolRowToStored(row: ProtocolRow): StoredProtocol {
   return {
     slug: row.slug,
@@ -87,6 +101,51 @@ export function getTrackedProtocols(db: SqliteDatabase = getDb()): StoredProtoco
     .all() as ProtocolRow[]
 
   return rows.map((row) => protocolRowToStored(row))
+}
+
+export function isProtocolTracked(slug: string, db: SqliteDatabase = getDb()): boolean {
+  if (!slug) return false
+  const row = db.prepare('SELECT 1 as found FROM tracked_protocols WHERE slug = ? LIMIT 1').get(slug) as { found: number } | undefined
+  return Boolean(row)
+}
+
+export function touchTracked(slugs: string[], db: SqliteDatabase = getDb()): number {
+  const unique = Array.from(new Set((slugs || []).map((slug) => slug.trim()).filter(Boolean)))
+  if (!unique.length) return 0
+
+  const placeholders = unique.map(() => '?').join(',')
+  const result = db.prepare(`UPDATE tracked_protocols SET last_read_at = CURRENT_TIMESTAMP WHERE slug IN (${placeholders})`).run(...unique)
+  return result.changes ?? 0
+}
+
+export function pruneInactiveTracked(options: { olderThanDays?: number; logger?: (message: string) => void } = {}, db: SqliteDatabase = getDb()): { deleted: number; slugs: string[] } {
+  const logger = options.logger ?? defaultLogger
+  const ttlDays = resolveTrackedTtlDays(options.olderThanDays)
+
+  try {
+    const stale = db.prepare(`SELECT slug FROM tracked_protocols WHERE last_read_at < datetime('now', ?)`).all(`-${ttlDays} days`) as { slug: string }[]
+    const slugs = stale.map((row) => row.slug)
+
+    if (!slugs.length) {
+      logger(`[prune] No tracked protocols older than ${ttlDays} days to remove`)
+      return { deleted: 0, slugs: [] }
+    }
+
+    const placeholders = slugs.map(() => '?').join(',')
+    const deleted = db.transaction((values: string[]) => {
+      db.prepare(`DELETE FROM ingest_cursors WHERE slug IN (${placeholders})`).run(...values)
+      const res = db.prepare(`DELETE FROM tracked_protocols WHERE slug IN (${placeholders})`).run(...values)
+      return res.changes ?? 0
+    })(slugs)
+
+    const listPreview = slugs.length > 20 ? `${slugs.slice(0, 20).join(', ')} (+${slugs.length - 20} more)` : slugs.join(', ')
+    logger(`[prune] Removed ${deleted} tracked protocols older than ${ttlDays} days: ${listPreview}`)
+
+    return { deleted, slugs }
+  } catch (error) {
+    logger(`[prune] Failed to prune inactive tracked protocols: ${(error as Error).message}`)
+    return { deleted: 0, slugs: [] }
+  }
 }
 
 function ensureArray(value: string[] | undefined | null): string[] {
@@ -267,7 +326,6 @@ function findProtocolBySlugOrId(slug: string, db: SqliteDatabase = getDb()): Pro
 }
 
 export async function addTrackedProtocolBySlug(slugOrId: string, db: SqliteDatabase = getDb()): Promise<{ created: boolean; slug: string; protocol: StoredProtocol }> {
-  applySchema()
   let existing = findProtocolBySlugOrId(slugOrId, db)
 
   if (!existing) {
@@ -282,7 +340,9 @@ export async function addTrackedProtocolBySlug(slugOrId: string, db: SqliteDatab
 
   const protocol = protocolRowToStored(existing)
 
-  const res = db.prepare('INSERT INTO tracked_protocols (slug) VALUES (?) ON CONFLICT(slug) DO NOTHING').run(protocol.slug)
+  const res = db
+    .prepare('INSERT INTO tracked_protocols (slug, created_at, last_read_at) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT(slug) DO NOTHING')
+    .run(protocol.slug)
 
   return { created: res.changes > 0, slug: protocol.slug, protocol }
 }
@@ -443,7 +503,6 @@ export async function ingestDefillama(options: IngestOptions = {}): Promise<Inge
   const concurrency = options.concurrency ?? DEFAULT_CONCURRENCY
   const logger = options.logger ?? defaultLogger
 
-  applySchema()
   const db = getDb()
 
   const runId = db.prepare("INSERT INTO ingest_runs (run_at, status, note, items_fetched) VALUES (CURRENT_TIMESTAMP, 'running', NULL, 0)").run().lastInsertRowid as number
@@ -484,7 +543,6 @@ export async function ingestDefillama(options: IngestOptions = {}): Promise<Inge
 
 export async function syncProtocolCatalog(options: { logger?: (msg: string) => void } = {}): Promise<{ protocolsSeen: number; rawProtocolsSeen: number }> {
   const logger = options.logger ?? defaultLogger
-  applySchema()
   const db = getDb()
   const overview = await fetchFeesOverview()
   const protocols = overview.protocols || []

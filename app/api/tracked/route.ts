@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { parseMetricTypes, parseStringList } from '@/lib/api'
 import { addTrackedProtocolBySlug, getTrackedProtocols, type ProtocolFilter } from '@/lib/ingest'
 import { triggerIngestNow } from '@/lib/scheduler'
+import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'

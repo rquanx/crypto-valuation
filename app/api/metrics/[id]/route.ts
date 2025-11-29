@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { API_CACHE_CONTROL_HEADER, API_CACHE_TTL_SECONDS } from '@/lib/api'
-import { addTrackedProtocolBySlug, type NormalizedMetricType } from '@/lib/ingest'
+import { addTrackedProtocolBySlug, isProtocolTracked, touchTracked, type NormalizedMetricType } from '@/lib/ingest'
 import { getProtocolSeries } from '@/lib/queries'
 import { triggerIngestNow } from '@/lib/scheduler'
 
@@ -19,7 +19,7 @@ export async function GET(_request: NextRequest, context: RouteContext<'/api/met
   let ingestTriggered = false
 
   // If we have no protocol or no data, try to add/track it and fetch fresh data once.
-  if (!result || !hasAnyData(result)) {
+  if (!result || !hasAnyData(result) || !isProtocolTracked(slug)) {
     try {
       const tracked = await addTrackedProtocolBySlug(slug)
       slug = tracked.slug
@@ -38,6 +38,8 @@ export async function GET(_request: NextRequest, context: RouteContext<'/api/met
   if (!result) {
     return NextResponse.json({ ok: false, error: 'Protocol not found' }, { status: 404 })
   }
+
+  touchTracked([result.protocol.slug])
 
   const response = NextResponse.json({ ok: true, ...result })
   response.headers.set('Cache-Control', hasAnyData(result) ? API_CACHE_CONTROL_HEADER : 'no-store')

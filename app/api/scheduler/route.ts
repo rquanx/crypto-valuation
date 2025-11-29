@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authorizeRequest } from '@/lib/api'
-import { syncProtocolCatalog } from '@/lib/ingest'
+import { pruneInactiveTracked, syncProtocolCatalog } from '@/lib/ingest'
 import { triggerIngestNow } from '@/lib/scheduler'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-type SchedulerJob = 'ingest' | 'catalog'
+type SchedulerJob = 'ingest' | 'catalog' | 'prune'
 
 function parseJob(request: NextRequest, payload?: { job?: string | null }): SchedulerJob {
   const job = payload?.job ?? request.nextUrl.searchParams.get('job') ?? 'ingest'
-  return job === 'catalog' ? 'catalog' : 'ingest'
+  if (job === 'catalog') return 'catalog'
+  if (job === 'prune') return 'prune'
+  return 'ingest'
 }
 
 async function handleRequest(request: NextRequest, payload?: { job?: string | null }) {
@@ -23,6 +25,11 @@ async function handleRequest(request: NextRequest, payload?: { job?: string | nu
   try {
     if (job === 'catalog') {
       const result = await syncProtocolCatalog()
+      return NextResponse.json({ ok: true, job, result })
+    }
+
+    if (job === 'prune') {
+      const result = pruneInactiveTracked({ logger: (msg) => console.log(`[scheduler-api] ${msg}`) })
       return NextResponse.json({ ok: true, job, result })
     }
 
