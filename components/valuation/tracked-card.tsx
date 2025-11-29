@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useDrag, useDrop } from 'react-dnd'
 import { useQuery } from '@tanstack/react-query'
 import { GripVertical } from 'lucide-react'
@@ -11,8 +11,10 @@ import { Input } from '@/components/ui/input'
 import { LoadingPulse } from '@/components/valuation/loading-pulse'
 import { MetricSummaryCard } from '@/components/valuation/metric-summary-card'
 import { ProtocolAvatar } from '@/components/valuation/protocol-avatar'
+import { TrackedCardModal } from '@/components/valuation/tracked-card-modal'
 import { cn } from '@/lib/utils'
-import { computeTokenFromSeries, mergeTrackedWithProtocol, trackedHasDiff, type ApiSeriesResponse, type StoredTracked } from '@/lib/valuation'
+import { computeTokenFromSeries, mergeTrackedWithProtocol, trackedHasDiff, type StoredTracked } from '@/lib/valuation'
+import { fetchMetrics, metricsQueryKey } from '@/lib/metrics-client'
 
 type DragItem = {
   slug: string
@@ -27,19 +29,14 @@ type TrackedCardProps = {
   onMove?: (fromSlug: string, toSlug: string) => void
 }
 
-async function fetchMetrics(slug: string): Promise<ApiSeriesResponse> {
-  const res = await fetch(`/api/metrics/${encodeURIComponent(slug)}`)
-  const json = await res.json()
-  if (!json.ok) throw new Error(json.error || `加载 ${slug} 数据失败`)
-  return json as ApiSeriesResponse
-}
 const time = 60 * 1000 * 60 * 12
 
 const DRAG_TYPE = 'TRACKED_CARD'
 
 export function TrackedCard({ item, refreshNonce, onPeChange, onRemove, onMetaUpdate, onMove }: TrackedCardProps) {
+  const [showChartModal, setShowChartModal] = useState(false)
   const { data, isLoading, isFetching, error } = useQuery({
-    queryKey: ['protocolMetrics', item.slug.toLowerCase(), refreshNonce],
+    queryKey: metricsQueryKey(item.slug, refreshNonce),
     queryFn: () => fetchMetrics(item.slug),
     staleTime: time,
   })
@@ -58,20 +55,26 @@ export function TrackedCard({ item, refreshNonce, onPeChange, onRemove, onMetaUp
   const logo = computed?.protocol.logo || item.logo
   const isPending = isLoading || isFetching
   const errorMessage = error instanceof Error ? error.message : null
-  const [{ isOver }, drop] = useDrop<DragItem, void, { isOver: boolean }>(() => ({
-    accept: DRAG_TYPE,
-    drop: (dragItem) => {
-      if (dragItem.slug !== item.slug) onMove?.(dragItem.slug, item.slug)
-    },
-    collect: (monitor) => ({
-      isOver: monitor.isOver({ shallow: true }) && monitor.getItem()?.slug !== item.slug,
+  const [{ isOver }, drop] = useDrop<DragItem, void, { isOver: boolean }>(
+    () => ({
+      accept: DRAG_TYPE,
+      drop: (dragItem) => {
+        if (dragItem.slug !== item.slug) onMove?.(dragItem.slug, item.slug)
+      },
+      collect: (monitor) => ({
+        isOver: monitor.isOver({ shallow: true }) && monitor.getItem()?.slug !== item.slug,
+      }),
     }),
-  }), [item.slug, onMove])
-  const [{ isDragging }, drag] = useDrag<DragItem, void, { isDragging: boolean }>(() => ({
-    type: DRAG_TYPE,
-    item: { slug: item.slug },
-    collect: (monitor) => ({ isDragging: monitor.isDragging() }),
-  }), [item.slug])
+    [item.slug, onMove]
+  )
+  const [{ isDragging }, drag] = useDrag<DragItem, void, { isDragging: boolean }>(
+    () => ({
+      type: DRAG_TYPE,
+      item: { slug: item.slug },
+      collect: (monitor) => ({ isDragging: monitor.isDragging() }),
+    }),
+    [item.slug]
+  )
   const cardRef = useCallback(
     (node: HTMLDivElement | null) => {
       if (node) drop(node)
@@ -117,6 +120,9 @@ export function TrackedCard({ item, refreshNonce, onPeChange, onRemove, onMetaUp
                 <span className="text-[#9cb2d1]">PE</span>
                 <Input type="number" value={item.pe} min={0} onChange={(e) => onPeChange(item.slug, Number(e.target.value))} className="h-9 w-20 bg-transparent" />
               </div>
+              <Button variant="outline" size="md" onClick={() => setShowChartModal(true)} className="border-[#57c7ff]/50 text-[#cdd8ec] ">
+                查看走势
+              </Button>
             </div>
             <Button className="text-[#9cb2d1]" variant="ghost" size="icon" onClick={() => onRemove(item.slug)} title="移除">
               ×
@@ -138,6 +144,19 @@ export function TrackedCard({ item, refreshNonce, onPeChange, onRemove, onMetaUp
           )}
         </CardContent>
       </Card>
+
+      {showChartModal ? (
+        <TrackedCardModal
+          data={data}
+          open={showChartModal}
+          onClose={() => setShowChartModal(false)}
+          name={displayName}
+          logo={logo}
+          peFromCard={item.pe}
+          seriesByMetric={data?.pointsByMetric}
+          refreshKey={refreshNonce}
+        />
+      ) : null}
     </div>
   )
 }

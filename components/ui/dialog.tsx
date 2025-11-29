@@ -18,9 +18,7 @@ export function Dialog({ open, onClose, children }: DialogProps) {
   return createPortal(
     <div className="fixed inset-0 z-50">
       <div className="fixed inset-0 bg-[#02060f]/70 backdrop-blur-md" onClick={onClose} />
-      <div className="absolute inset-0 flex items-center justify-center px-4">
-        {children}
-      </div>
+      <div className="flex items-center justify-center min-w-[65vw] absolute left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%]">{children}</div>
     </div>,
     document.body
   )
