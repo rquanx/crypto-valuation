@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { API_CACHE_CONTROL_HEADER, API_CACHE_TTL_SECONDS, parseStringList } from '@/lib/api'
-import { touchTracked } from '@/lib/ingest'
 import { getCoverageList } from '@/lib/queries'
+import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 export const revalidate = API_CACHE_TTL_SECONDS
